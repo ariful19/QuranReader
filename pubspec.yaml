@@ -1,0 +1,32 @@
+name: quran_reader
+description: "A native Quran reading tracker built with Flutter."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.5.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  shared_preferences: ^2.3.2
+  url_launcher: ^6.3.1
+  xml: ^6.5.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - Resources/quran-uthmani.xml
+  fonts:
+    - family: KFGQPC
+      fonts:
+        - asset: Resources/KFGQPC Uthmanic Script HAFS Regular.otf
+    - family: UthmanicHafs
+      fonts:
+        - asset: Resources/UthmanicHafs1Ver18.ttf
