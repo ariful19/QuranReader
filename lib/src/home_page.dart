@@ -4,6 +4,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'app_controller.dart';
 import 'models.dart';
 import 'reader_page.dart';
+import 'settings_page.dart';
 
 class QuranHomePage extends StatelessWidget {
   const QuranHomePage({
@@ -22,6 +23,12 @@ class QuranHomePage extends StatelessWidget {
           appBar: AppBar(
             title: const Text('QuranReader'),
             actions: [
+              IconButton(
+                key: const Key('settings-button'),
+                onPressed: () => _openSettings(context),
+                icon: const Icon(Icons.settings_outlined),
+                tooltip: 'Settings',
+              ),
               IconButton(
                 key: const Key('goal-button'),
                 onPressed: () => _showGoalDialog(context),
@@ -91,6 +98,14 @@ class QuranHomePage extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+
+  void _openSettings(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SettingsPage(controller: controller),
+      ),
     );
   }
 

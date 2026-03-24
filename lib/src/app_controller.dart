@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
+import 'ai_models.dart';
+import 'ai_services.dart';
 import 'models.dart';
 import 'progress_repository.dart';
 import 'quran_repository.dart';
@@ -10,11 +12,20 @@ class QuranAppController extends ChangeNotifier {
   QuranAppController({
     required CatalogSource catalogSource,
     required AppStateStore appStateStore,
+    AiSecretsStore? aiSecretsStore,
+    AiCacheRepository? aiCacheRepository,
+    GeminiClient? geminiClient,
   })  : _catalogSource = catalogSource,
-        _appStateStore = appStateStore;
+        _appStateStore = appStateStore,
+        _aiSecretsStore = aiSecretsStore ?? MemoryAiSecretsStore(),
+        _aiCacheRepository = aiCacheRepository ?? MemoryAiCacheRepository(),
+        _geminiClient = geminiClient ?? GeminiClient();
 
   final CatalogSource _catalogSource;
   final AppStateStore _appStateStore;
+  final AiSecretsStore _aiSecretsStore;
+  final AiCacheRepository _aiCacheRepository;
+  final GeminiClient _geminiClient;
 
   bool _isReady = false;
   List<SurahData> _catalog = const [];
@@ -22,11 +33,15 @@ class QuranAppController extends ChangeNotifier {
   SurahOrderMode _orderMode = SurahOrderMode.normal;
   GoalState? _goalState;
   ReaderSettings _readerSettings = ReaderSettings.defaults;
+  bool _hasGeminiApiKey = false;
 
   static Future<QuranAppController> create() async {
     final controller = QuranAppController(
       catalogSource: const AssetQuranCatalogSource(),
       appStateStore: await SharedPreferencesAppStateStore.create(),
+      aiSecretsStore: FlutterSecureAiSecretsStore(),
+      aiCacheRepository: await SqfliteAiCacheRepository.open(),
+      geminiClient: GeminiClient(),
     );
     await controller.load();
     return controller;
@@ -39,6 +54,8 @@ class QuranAppController extends ChangeNotifier {
   GoalState? get goalState => _goalState;
 
   ReaderSettings get readerSettings => _readerSettings;
+
+  bool get hasGeminiApiKey => _hasGeminiApiKey;
 
   List<SurahData> get visibleSurahs {
     final surahs = [..._catalog];
@@ -136,6 +153,7 @@ class QuranAppController extends ChangeNotifier {
               SurahProgress.empty,
       };
     }
+    _hasGeminiApiKey = await _aiSecretsStore.loadApiKey() != null;
 
     _isReady = true;
     notifyListeners();
@@ -288,6 +306,86 @@ class QuranAppController extends ChangeNotifier {
     await _persistAndNotify();
   }
 
+  Future<String?> saveGeminiApiKey(String apiKey) async {
+    final normalized = apiKey.trim();
+    if (normalized.isEmpty) {
+      return 'Please enter a Gemini API key.';
+    }
+    await _aiSecretsStore.saveApiKey(normalized);
+    _hasGeminiApiKey = true;
+    notifyListeners();
+    return null;
+  }
+
+  Future<void> deleteGeminiApiKey() async {
+    await _aiSecretsStore.deleteApiKey();
+    _hasGeminiApiKey = false;
+    notifyListeners();
+  }
+
+  Future<void> clearAiCache() async {
+    await _aiCacheRepository.clear();
+    notifyListeners();
+  }
+
+  Future<InsightLoadResult<WordInsightRecord>> getWordInsight({
+    required WordInsightRequest request,
+    bool refresh = false,
+  }) async {
+    final apiKey = await _aiSecretsStore.loadApiKey();
+    if (apiKey == null) {
+      throw const MissingGeminiApiKeyException();
+    }
+
+    if (!refresh) {
+      final cached = await _aiCacheRepository.getWordInsight(
+        surahIndex: request.surahIndex,
+        ayahNumber: request.ayahNumber,
+        normalizedWord: request.normalizedWord,
+        occurrenceIndex: request.occurrenceIndex,
+        promptVersion: GeminiClient.wordInsightPromptVersion,
+      );
+      if (cached != null) {
+        return InsightLoadResult(data: cached, isFromCache: true);
+      }
+    }
+
+    final generated = await _geminiClient.generateWordInsight(
+      apiKey: apiKey,
+      request: request,
+    );
+    await _aiCacheRepository.saveWordInsight(generated);
+    return InsightLoadResult(data: generated, isFromCache: false);
+  }
+
+  Future<InsightLoadResult<AyahInsightRecord>> getAyahInsight({
+    required AyahInsightRequest request,
+    bool refresh = false,
+  }) async {
+    final apiKey = await _aiSecretsStore.loadApiKey();
+    if (apiKey == null) {
+      throw const MissingGeminiApiKeyException();
+    }
+
+    if (!refresh) {
+      final cached = await _aiCacheRepository.getAyahInsight(
+        surahIndex: request.surahIndex,
+        ayahNumber: request.ayahNumber,
+        promptVersion: GeminiClient.ayahInsightPromptVersion,
+      );
+      if (cached != null) {
+        return InsightLoadResult(data: cached, isFromCache: true);
+      }
+    }
+
+    final generated = await _geminiClient.generateAyahInsight(
+      apiKey: apiKey,
+      request: request,
+    );
+    await _aiCacheRepository.saveAyahInsight(generated);
+    return InsightLoadResult(data: generated, isFromCache: false);
+  }
+
   Future<void> _persistAndNotify() async {
     await _appStateStore.save(
       PersistedState(
@@ -299,4 +397,18 @@ class QuranAppController extends ChangeNotifier {
     );
     notifyListeners();
   }
+
+  @override
+  void dispose() {
+    _geminiClient.close();
+    _aiCacheRepository.close();
+    super.dispose();
+  }
+}
+
+class MissingGeminiApiKeyException implements Exception {
+  const MissingGeminiApiKeyException();
+
+  @override
+  String toString() => 'Missing Gemini API key.';
 }

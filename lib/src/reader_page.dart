@@ -1,7 +1,9 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 
+import 'ai_dialogs.dart';
+import 'ai_models.dart';
 import 'app_controller.dart';
 import 'models.dart';
 
@@ -478,7 +480,7 @@ class _ReaderCanvas extends StatelessWidget {
   }
 }
 
-class _ContinuousAyahText extends StatelessWidget {
+class _ContinuousAyahText extends StatefulWidget {
   const _ContinuousAyahText({
     required this.surah,
     required this.controller,
@@ -494,6 +496,20 @@ class _ContinuousAyahText extends StatelessWidget {
   final GlobalKey Function(int ayahNumber) ayahAnchorKeyFor;
 
   @override
+  State<_ContinuousAyahText> createState() => _ContinuousAyahTextState();
+}
+
+class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
+  final GlobalKey _richTextKey = GlobalKey();
+
+  SurahData get surah => widget.surah;
+  QuranAppController get controller => widget.controller;
+  _ReaderPalette get palette => widget.palette;
+  double get fontSize => widget.fontSize;
+  GlobalKey Function(int ayahNumber) get ayahAnchorKeyFor =>
+      widget.ayahAnchorKeyFor;
+
+  @override
   Widget build(BuildContext context) {
     final baseStyle = Theme.of(context).textTheme.headlineSmall?.copyWith(
           fontFamily: 'UthmanicHafs',
@@ -501,63 +517,193 @@ class _ContinuousAyahText extends StatelessWidget {
           height: 1.85,
           color: palette.textColor,
         );
+    final presentation = _buildPresentation(context);
 
-    return Text.rich(
-      TextSpan(
-        children: [
-          for (final ayah in surah.ayahs) ...[
-            ...ayah.displayRuns.map(
-              (run) => TextSpan(
-                text: run.text,
-                recognizer: TapGestureRecognizer()
-                  ..onTap = () {
-                    HapticFeedback.selectionClick();
-                    showAyahRangeDialog(
-                      context: context,
-                      controller: controller,
-                      surah: surah,
-                      tappedAyah: ayah.number,
-                    );
-                  },
-                style: TextStyle(
-                  fontFamily: run.isAnnotation ? 'MeQuran' : null,
-                  backgroundColor: controller.isAyahSaved(surah, ayah.number)
-                      ? palette.savedAyahColor
-                      : Colors.transparent,
-                ),
-              ),
-            ),
-            WidgetSpan(
-              alignment: PlaceholderAlignment.middle,
-              child: Container(
-                key: ayahAnchorKeyFor(ayah.number),
-                child: GestureDetector(
-                  key: Key('ayah-${surah.index}-${ayah.number}'),
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {
-                    HapticFeedback.selectionClick();
-                    showAyahRangeDialog(
-                      context: context,
-                      controller: controller,
-                      surah: surah,
-                      tappedAyah: ayah.number,
-                    );
-                  },
-                  child: _AyahMarker(
-                    number: ayah.number,
-                    fillColor: palette.markerFillColor,
-                  ),
-                ),
-              ),
-            ),
-            const TextSpan(text: '  '),
-          ],
-        ],
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTapUp: (details) {
+        final target = _wordTargetForOffset(details.localPosition, presentation);
+        if (target == null) {
+          return;
+        }
+        HapticFeedback.selectionClick();
+        showAyahRangeDialog(
+          context: context,
+          controller: controller,
+          surah: surah,
+          tappedAyah: target.ayahNumber,
+        );
+      },
+      onLongPressStart: (details) {
+        final target = _wordTargetForOffset(details.localPosition, presentation);
+        if (target == null) {
+          return;
+        }
+        HapticFeedback.mediumImpact();
+        showWordInsightDialog(
+          context: context,
+          controller: controller,
+          request: target.request,
+        );
+      },
+      child: KeyedSubtree(
+        key: const Key('continuous-ayah-text'),
+        child: RichText(
+          key: _richTextKey,
+          text: TextSpan(
+            style: baseStyle,
+            children: presentation.spans,
+          ),
+          textAlign: TextAlign.justify,
+          textDirection: TextDirection.rtl,
+        ),
       ),
-      textAlign: TextAlign.justify,
-      style: baseStyle,
     );
   }
+
+  _AyahTextPresentation _buildPresentation(BuildContext context) {
+    final spans = <InlineSpan>[];
+    final wordTargets = <_InteractiveWordTarget>[];
+    var offset = 0;
+
+    for (final ayah in surah.ayahs) {
+      final savedColor = controller.isAyahSaved(surah, ayah.number)
+          ? palette.savedAyahColor
+          : Colors.transparent;
+      final tokenMatches = RegExp(r'\s+|\S+').allMatches(ayah.renderedText);
+      var occurrenceIndex = 0;
+
+      for (final match in tokenMatches) {
+        final token = match.group(0) ?? '';
+        final tokenStyle = TextStyle(backgroundColor: savedColor);
+        if (token.trim().isEmpty) {
+          spans.add(TextSpan(text: token, style: tokenStyle));
+          offset += token.length;
+          continue;
+        }
+
+        occurrenceIndex += 1;
+        final start = offset;
+        spans.add(
+          TextSpan(
+            style: tokenStyle,
+            children: [
+              for (final run in splitQuranTextRuns(token))
+                TextSpan(
+                  text: run.text,
+                  style: TextStyle(
+                    fontFamily: run.isAnnotation ? 'MeQuran' : null,
+                    backgroundColor: savedColor,
+                  ),
+                ),
+            ],
+          ),
+        );
+        offset += token.length;
+        wordTargets.add(
+          _InteractiveWordTarget(
+            range: TextRange(start: start, end: offset),
+            ayahNumber: ayah.number,
+            request: WordInsightRequest(
+              surahIndex: surah.index,
+              surahName: surah.englishName,
+              ayahNumber: ayah.number,
+              ayahText: ayah.renderedText,
+              word: token,
+              occurrenceIndex: occurrenceIndex,
+            ),
+          ),
+        );
+      }
+
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Container(
+            key: ayahAnchorKeyFor(ayah.number),
+            child: GestureDetector(
+              key: Key('ayah-${surah.index}-${ayah.number}'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () {
+                HapticFeedback.selectionClick();
+                showAyahRangeDialog(
+                  context: context,
+                  controller: controller,
+                  surah: surah,
+                  tappedAyah: ayah.number,
+                );
+              },
+              onLongPress: () {
+                HapticFeedback.mediumImpact();
+                showAyahInsightDialog(
+                  context: context,
+                  controller: controller,
+                  request: AyahInsightRequest(
+                    surahIndex: surah.index,
+                    surahName: surah.englishName,
+                    ayahNumber: ayah.number,
+                    ayahText: ayah.renderedText,
+                  ),
+                );
+              },
+              child: _AyahMarker(
+                number: ayah.number,
+                fillColor: palette.markerFillColor,
+              ),
+            ),
+          ),
+        ),
+      );
+      offset += 1;
+      spans.add(const TextSpan(text: '  '));
+      offset += 2;
+    }
+
+    return _AyahTextPresentation(
+      spans: spans,
+      wordTargets: wordTargets,
+    );
+  }
+
+  _InteractiveWordTarget? _wordTargetForOffset(
+    Offset localPosition,
+    _AyahTextPresentation presentation,
+  ) {
+    final renderObject = _richTextKey.currentContext?.findRenderObject();
+    if (renderObject is! RenderParagraph) {
+      return null;
+    }
+    final position = renderObject.getPositionForOffset(localPosition);
+    for (final target in presentation.wordTargets) {
+      if (position.offset >= target.range.start &&
+          position.offset < target.range.end) {
+        return target;
+      }
+    }
+    return null;
+  }
+}
+
+class _AyahTextPresentation {
+  const _AyahTextPresentation({
+    required this.spans,
+    required this.wordTargets,
+  });
+
+  final List<InlineSpan> spans;
+  final List<_InteractiveWordTarget> wordTargets;
+}
+
+class _InteractiveWordTarget {
+  const _InteractiveWordTarget({
+    required this.range,
+    required this.ayahNumber,
+    required this.request,
+  });
+
+  final TextRange range;
+  final int ayahNumber;
+  final WordInsightRequest request;
 }
 
 class _AyahMarker extends StatelessWidget {
