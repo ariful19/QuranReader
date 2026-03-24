@@ -1,16 +1,20 @@
 # QuranReader
 
-QuranReader is a native Flutter Android app for reading the Quran and tracking reading progress.
+QuranReader is a native Flutter Android app for reading the Quran, tracking reading progress, and optionally opening Gemini-powered word and ayah insights.
 
-It was built as a native replacement for the earlier `QuranTracker` WebView app. The app renders the bundled Quran text directly in Flutter, lets you save progress by ayah range, and keeps your reading settings and progress locally on the device.
+It was built as a native replacement for the earlier `QuranTracker` WebView app. The app renders the bundled Quran text directly in Flutter, preserves Quran annotation signs with the bundled MeQuran font, lets you save progress by ayah range, and keeps your reading settings, progress, and saved AI insight responses locally on the device.
 
 ## Features
 
 - Native Flutter reader for the bundled Quran text
-- Clean Arabic reading view with Quran annotation signs hidden on-screen
+- Arabic reading view with Quran annotation signs rendered using the bundled MeQuran font
 - Save progress by tapping an ayah and storing a range
 - Smart range suggestions based on the next unread stretch
 - Tap saved range chips to jump to the ending ayah
+- Long-press a word in the continuous reader to open Gemini-powered Bengali word insights with linguistic notes
+- Long-press an ayah marker to open Gemini-powered Bengali ayah insights with tafsir-style summary, themes, lessons, and linked sources when available
+- Settings page to save or remove a Gemini API key and clear saved AI insights
+- Cached AI responses for faster repeat lookups, with refresh actions in the insight dialogs
 - Full-screen reading mode
 - Reader settings for font size and background color
 - Per-surah progress and total progress tracking
@@ -20,7 +24,7 @@ It was built as a native replacement for the earlier `QuranTracker` WebView app.
 ## Project Structure
 
 - `lib/` Flutter application source
-- `Resources/` Quran text and Quran font assets used by the app
+- `Resources/` Quran text and bundled Quran font assets, including the MeQuran annotation font
 - `android/` Android host project
 - `test/` widget and logic tests
 
@@ -28,6 +32,8 @@ It was built as a native replacement for the earlier `QuranTracker` WebView app.
 
 - The `QuranTracker/` folder in the local workspace was used as a reference during development and is intentionally not included in this public repository.
 - Quran text attribution: Tanzil Project, Uthmani text.
+- AI insights are optional and require a user-provided Gemini API key. The key is saved on-device, and insight responses are cached locally until cleared from Settings.
+- Fresh AI insight requests require internet access.
 
 ## Getting Started
 
@@ -36,6 +42,7 @@ It was built as a native replacement for the earlier `QuranTracker` WebView app.
 - Flutter SDK
 - Android SDK
 - A connected Android device or emulator
+- A Gemini API key if you want to use the optional AI insight features
 
 ### Run
 
@@ -43,6 +50,14 @@ It was built as a native replacement for the earlier `QuranTracker` WebView app.
 flutter pub get
 flutter run
 ```
+
+After the app opens, use the home screen Settings button to save a Gemini API key if you want word and ayah insights.
+
+### Using AI Insights
+
+- Long-press a word in the continuous reader to open a word insight dialog
+- Long-press an ayah marker to open an ayah insight dialog
+- Use the refresh button inside an insight dialog to bypass the saved response and request a fresh one
 
 ### Test
 
