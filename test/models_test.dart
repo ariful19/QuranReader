@@ -18,11 +18,16 @@ void main() {
     expect(merged.first.toAyah, 9);
   });
 
-  test('stripQuranAnnotations removes Quran-specific annotation signs', () {
+  test('splitQuranTextRuns isolates Quran-specific annotation signs', () {
     const source = 'وَدُّوا۟ لَوْ تُدْهِنُ فَيُدْهِنُونَ ۞ عُتُلٍّۭ';
-    final cleaned = stripQuranAnnotations(source);
+    final runs = splitQuranTextRuns(source);
 
-    expect(cleaned, 'وَدُّوا لَوْ تُدْهِنُ فَيُدْهِنُونَ  عُتُلٍّ');
+    expect(runs.map((run) => run.text).join(), source);
+    expect(runs.where((run) => run.isAnnotation).map((run) => run.text), [
+      '۟',
+      '۞',
+      'ۭ',
+    ]);
   });
 
   test('suggestedRangeForTappedAyah follows the nearest unfinished gap', () {

@@ -506,22 +506,25 @@ class _ContinuousAyahText extends StatelessWidget {
       TextSpan(
         children: [
           for (final ayah in surah.ayahs) ...[
-            TextSpan(
-              text: ayah.cleanedText,
-              recognizer: TapGestureRecognizer()
-                ..onTap = () {
-                  HapticFeedback.selectionClick();
-                  showAyahRangeDialog(
-                    context: context,
-                    controller: controller,
-                    surah: surah,
-                    tappedAyah: ayah.number,
-                  );
-                },
-              style: TextStyle(
-                backgroundColor: controller.isAyahSaved(surah, ayah.number)
-                    ? palette.savedAyahColor
-                    : Colors.transparent,
+            ...ayah.displayRuns.map(
+              (run) => TextSpan(
+                text: run.text,
+                recognizer: TapGestureRecognizer()
+                  ..onTap = () {
+                    HapticFeedback.selectionClick();
+                    showAyahRangeDialog(
+                      context: context,
+                      controller: controller,
+                      surah: surah,
+                      tappedAyah: ayah.number,
+                    );
+                  },
+                style: TextStyle(
+                  fontFamily: run.isAnnotation ? 'MeQuran' : null,
+                  backgroundColor: controller.isAyahSaved(surah, ayah.number)
+                      ? palette.savedAyahColor
+                      : Colors.transparent,
+                ),
               ),
             ),
             WidgetSpan(

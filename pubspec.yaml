@@ -30,3 +30,6 @@ flutter:
     - family: UthmanicHafs
       fonts:
         - asset: Resources/UthmanicHafs1Ver18.ttf
+    - family: MeQuran
+      fonts:
+        - asset: Resources/me_quran Regular.ttf

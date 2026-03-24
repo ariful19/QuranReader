@@ -27,6 +27,17 @@ class SurahSeed {
 }
 
 @immutable
+class QuranTextRun {
+  const QuranTextRun({
+    required this.text,
+    required this.isAnnotation,
+  });
+
+  final String text;
+  final bool isAnnotation;
+}
+
+@immutable
 class AyahData {
   const AyahData({
     required this.number,
@@ -45,7 +56,7 @@ class AyahData {
     return '${bismillah!} $text';
   }
 
-  String get cleanedText => stripQuranAnnotations(renderedText);
+  List<QuranTextRun> get displayRuns => splitQuranTextRuns(renderedText);
 
   int get unicodeChars => renderedText.runes.length;
 }
@@ -355,8 +366,39 @@ String formatPercent(double value) {
   return '${value.toStringAsFixed(2)}%';
 }
 
-final RegExp _quranAnnotationSigns = RegExp(r'[\u06D6-\u06ED]');
+bool isQuranAnnotationRune(int rune) {
+  return rune >= 0x06D6 && rune <= 0x06ED;
+}
 
-String stripQuranAnnotations(String text) {
-  return text.replaceAll(_quranAnnotationSigns, '');
+List<QuranTextRun> splitQuranTextRuns(String text) {
+  final runs = <QuranTextRun>[];
+  final buffer = StringBuffer();
+  bool? currentIsAnnotation;
+
+  void flush() {
+    if (buffer.isEmpty || currentIsAnnotation == null) {
+      return;
+    }
+    runs.add(
+      QuranTextRun(
+        text: buffer.toString(),
+        isAnnotation: currentIsAnnotation,
+      ),
+    );
+    buffer.clear();
+  }
+
+  for (final rune in text.runes) {
+    final isAnnotation = isQuranAnnotationRune(rune);
+    if (currentIsAnnotation == null) {
+      currentIsAnnotation = isAnnotation;
+    } else if (currentIsAnnotation != isAnnotation) {
+      flush();
+      currentIsAnnotation = isAnnotation;
+    }
+    buffer.writeCharCode(rune);
+  }
+
+  flush();
+  return runs;
 }
