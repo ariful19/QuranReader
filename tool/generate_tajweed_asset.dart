@@ -284,7 +284,7 @@ List<Map<String, Object?>> _mergeMappedRuns(List<Map<String, Object?>> runs) {
     }
     final bucket = run['bucket'] as String?;
     if (merged.isNotEmpty && merged.last['bucket'] == bucket) {
-      merged.last['text'] = '${merged.last['text']}${text}';
+      merged.last['text'] = '${merged.last['text']}$text';
       continue;
     }
     merged.add({

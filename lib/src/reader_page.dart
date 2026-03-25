@@ -12,10 +12,12 @@ class SurahReaderPage extends StatefulWidget {
     super.key,
     required this.controller,
     required this.surahIndex,
+    this.initialAyahNumber,
   });
 
   final QuranAppController controller;
   final int surahIndex;
+  final int? initialAyahNumber;
 
   @override
   State<SurahReaderPage> createState() => _SurahReaderPageState();
@@ -26,11 +28,30 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
   final ScrollController _readerScrollController = ScrollController();
   final Map<int, GlobalKey> _ayahAnchorKeys = <int, GlobalKey>{};
   double _pendingReaderOffset = 0;
+  bool _hasAppliedInitialAyahJump = false;
+  int _initialAyahJumpAttempts = 0;
 
   QuranAppController get controller => widget.controller;
 
   GlobalKey _anchorKeyForAyah(int ayahNumber) {
     return _ayahAnchorKeys.putIfAbsent(ayahNumber, GlobalKey.new);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleInitialAyahJumpIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(covariant SurahReaderPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.surahIndex != widget.surahIndex ||
+        oldWidget.initialAyahNumber != widget.initialAyahNumber) {
+      _hasAppliedInitialAyahJump = false;
+      _initialAyahJumpAttempts = 0;
+      _scheduleInitialAyahJumpIfNeeded();
+    }
   }
 
   Future<void> _scrollToAyah(int ayahNumber) async {
@@ -44,6 +65,34 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
       curve: Curves.easeOutCubic,
       alignment: 0.18,
     );
+  }
+
+  void _scheduleInitialAyahJumpIfNeeded() {
+    final initialAyahNumber = widget.initialAyahNumber;
+    if (initialAyahNumber == null ||
+        initialAyahNumber < 1 ||
+        _hasAppliedInitialAyahJump) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || _hasAppliedInitialAyahJump) {
+        return;
+      }
+
+      final ayahContext = _anchorKeyForAyah(initialAyahNumber).currentContext;
+      if (ayahContext == null) {
+        if (_initialAyahJumpAttempts >= 4) {
+          return;
+        }
+        _initialAyahJumpAttempts += 1;
+        _scheduleInitialAyahJumpIfNeeded();
+        return;
+      }
+
+      _hasAppliedInitialAyahJump = true;
+      await _scrollToAyah(initialAyahNumber);
+    });
   }
 
   @override
@@ -145,10 +194,10 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 12),
-                       Wrap(
-                         spacing: 12,
-                         runSpacing: 12,
-                         children: [
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
                           for (final palette in _readerPalettes)
                             _BackgroundChoice(
                               key: Key(
@@ -162,27 +211,27 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                                   selectedBackgroundKey = palette.keyName;
                                 });
                               },
-                             ),
-                         ],
-                       ),
-                       const SizedBox(height: 24),
-                       SwitchListTile.adaptive(
-                         key: const Key('reader-tajweed-switch'),
-                         contentPadding: EdgeInsets.zero,
-                         title: const Text('Tajweed colors'),
-                         subtitle: const Text(
-                           'Show color-coded tajweed rules in the Quran text.',
-                         ),
-                         value: selectedTajweedEnabled,
-                         onChanged: (value) {
-                           setState(() {
-                             selectedTajweedEnabled = value;
-                           });
-                         },
-                       ),
-                     ],
-                   ),
-                 ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      SwitchListTile.adaptive(
+                        key: const Key('reader-tajweed-switch'),
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Tajweed colors'),
+                        subtitle: const Text(
+                          'Show color-coded tajweed rules in the Quran text.',
+                        ),
+                        value: selectedTajweedEnabled,
+                        onChanged: (value) {
+                          setState(() {
+                            selectedTajweedEnabled = value;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
               ),
               actions: [
                 TextButton(
@@ -191,17 +240,17 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                 ),
                 FilledButton(
                   key: const Key('save-reader-settings-button'),
-                   onPressed: () async {
-                     await controller.setReaderFontSize(selectedFontSize);
-                     await controller.setReaderBackgroundKey(
-                       selectedBackgroundKey,
-                     );
-                     await controller.setReaderTajweedEnabled(
-                       selectedTajweedEnabled,
-                     );
-                     if (!dialogContext.mounted) {
-                       return;
-                     }
+                  onPressed: () async {
+                    await controller.setReaderFontSize(selectedFontSize);
+                    await controller.setReaderBackgroundKey(
+                      selectedBackgroundKey,
+                    );
+                    await controller.setReaderTajweedEnabled(
+                      selectedTajweedEnabled,
+                    );
+                    if (!dialogContext.mounted) {
+                      return;
+                    }
                     Navigator.of(dialogContext).pop();
                   },
                   child: const Text('Apply'),
@@ -221,6 +270,38 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
     SystemChrome.setSystemUIOverlayStyle(
       palette.isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
     );
+  }
+
+  Future<void> _navigateToAdjacentSurah(int surahOffset) async {
+    final targetSurah =
+        controller.trySurahByIndex(widget.surahIndex + surahOffset);
+    if (targetSurah == null || !mounted) {
+      return;
+    }
+
+    await Navigator.of(context).pushReplacement(
+      MaterialPageRoute<void>(
+        builder: (_) => SurahReaderPage(
+          controller: controller,
+          surahIndex: targetSurah.index,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleHorizontalDragEnd(DragEndDetails details) async {
+    final velocity =
+        details.primaryVelocity ?? details.velocity.pixelsPerSecond.dx;
+    if (velocity.abs() < 250) {
+      return;
+    }
+
+    if (velocity > 0) {
+      await _navigateToAdjacentSurah(1);
+      return;
+    }
+
+    await _navigateToAdjacentSurah(-1);
   }
 
   @override
@@ -280,46 +361,51 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                       ),
                     ],
                   ),
-            body: Stack(
-              children: [
-                SafeArea(
-                  top: !_isFullscreen,
-                  bottom: false,
-                  child: Padding(
-                    padding: EdgeInsets.fromLTRB(
-                      _isFullscreen ? 8 : 20,
-                      _isFullscreen ? 8 : 8,
-                      _isFullscreen ? 8 : 20,
-                      _isFullscreen ? 8 : 20,
-                    ),
-                    child: _ReaderLayout(
-                      surah: surah,
-                      controller: controller,
-                      percent: percent,
-                      savedRanges: savedRanges,
-                      onRangeTap: (range) => _scrollToAyah(range.toAyah),
-                      palette: palette,
-                      fontSize: settings.fontSize,
-                      isFullscreen: _isFullscreen,
-                      scrollController: _readerScrollController,
-                      ayahAnchorKeyFor: _anchorKeyForAyah,
-                    ),
-                  ),
-                ),
-                if (_isFullscreen)
+            body: GestureDetector(
+              key: const Key('reader-swipe-area'),
+              behavior: HitTestBehavior.translucent,
+              onHorizontalDragEnd: _handleHorizontalDragEnd,
+              child: Stack(
+                children: [
                   SafeArea(
+                    top: !_isFullscreen,
+                    bottom: false,
                     child: Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                      child: _FullscreenToolbar(
+                      padding: EdgeInsets.fromLTRB(
+                        _isFullscreen ? 8 : 20,
+                        _isFullscreen ? 8 : 8,
+                        _isFullscreen ? 8 : 20,
+                        _isFullscreen ? 8 : 20,
+                      ),
+                      child: _ReaderLayout(
                         surah: surah,
+                        controller: controller,
+                        percent: percent,
+                        savedRanges: savedRanges,
+                        onRangeTap: (range) => _scrollToAyah(range.toAyah),
                         palette: palette,
-                        onBack: () => Navigator.of(context).maybePop(),
-                        onSettings: _showReaderSettingsDialog,
-                        onExitFullscreen: () => _setFullscreen(false),
+                        fontSize: settings.fontSize,
+                        isFullscreen: _isFullscreen,
+                        scrollController: _readerScrollController,
+                        ayahAnchorKeyFor: _anchorKeyForAyah,
                       ),
                     ),
                   ),
-              ],
+                  if (_isFullscreen)
+                    SafeArea(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                        child: _FullscreenToolbar(
+                          surah: surah,
+                          palette: palette,
+                          onBack: () => Navigator.of(context).maybePop(),
+                          onSettings: _showReaderSettingsDialog,
+                          onExitFullscreen: () => _setFullscreen(false),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
         );
@@ -543,7 +629,8 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTapUp: (details) {
-        final target = _wordTargetForOffset(details.localPosition, presentation);
+        final target =
+            _wordTargetForOffset(details.localPosition, presentation);
         if (target == null) {
           return;
         }
@@ -556,7 +643,8 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
         );
       },
       onLongPressStart: (details) {
-        final target = _wordTargetForOffset(details.localPosition, presentation);
+        final target =
+            _wordTargetForOffset(details.localPosition, presentation);
         if (target == null) {
           return;
         }

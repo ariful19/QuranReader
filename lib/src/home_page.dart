@@ -54,7 +54,10 @@ class QuranHomePage extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 20),
               child: Column(
                 children: [
-                  _SummaryCard(controller: controller),
+                  _SummaryCard(
+                    controller: controller,
+                    onJumpPressed: () => _showJumpDialog(context),
+                  ),
                   const SizedBox(height: 16),
                   Align(
                     alignment: Alignment.centerLeft,
@@ -293,12 +296,28 @@ class QuranHomePage extends StatelessWidget {
       },
     );
   }
+
+  Future<void> _showJumpDialog(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return _JumpDialog(
+          controller: controller,
+          parentContext: context,
+        );
+      },
+    );
+  }
 }
 
 class _SummaryCard extends StatelessWidget {
-  const _SummaryCard({required this.controller});
+  const _SummaryCard({
+    required this.controller,
+    required this.onJumpPressed,
+  });
 
   final QuranAppController controller;
+  final VoidCallback onJumpPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -340,6 +359,13 @@ class _SummaryCard extends StatelessWidget {
                     color: Colors.white.withOpacity(0.88),
                   ),
             ),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              key: const Key('jump-button'),
+              onPressed: onJumpPressed,
+              icon: const Icon(Icons.travel_explore_rounded),
+              label: const Text('Jump'),
+            ),
             if (goalMetrics != null) ...[
               const SizedBox(height: 18),
               Wrap(
@@ -372,6 +398,246 @@ class _SummaryCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _JumpDialog extends StatefulWidget {
+  const _JumpDialog({
+    required this.controller,
+    required this.parentContext,
+  });
+
+  final QuranAppController controller;
+  final BuildContext parentContext;
+
+  @override
+  State<_JumpDialog> createState() => _JumpDialogState();
+}
+
+class _JumpDialogState extends State<_JumpDialog> {
+  late final TextEditingController _surahController;
+  late final TextEditingController _ayahController;
+  String _errorText = '';
+
+  QuranAppController get controller => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _surahController = TextEditingController();
+    _ayahController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _surahController.dispose();
+    _ayahController.dispose();
+    super.dispose();
+  }
+
+  SurahData? get _selectedSurah {
+    final surahNumber = int.tryParse(_surahController.text.trim());
+    if (surahNumber == null) {
+      return null;
+    }
+    return controller.trySurahByIndex(surahNumber);
+  }
+
+  Future<void> _openReader({
+    required int surahIndex,
+    int? initialAyahNumber,
+  }) async {
+    Navigator.of(context).pop();
+    await Navigator.of(widget.parentContext).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SurahReaderPage(
+          controller: controller,
+          surahIndex: surahIndex,
+          initialAyahNumber: initialAyahNumber,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _jumpToLastSavedRange() async {
+    final bookmark = controller.lastSavedRangeBookmark;
+    if (bookmark == null) {
+      setState(() => _errorText = 'No saved range has been bookmarked yet.');
+      return;
+    }
+
+    final surah = controller.trySurahByIndex(bookmark.surahIndex);
+    if (surah == null) {
+      setState(
+          () => _errorText = 'The bookmarked surah is no longer available.');
+      return;
+    }
+
+    await _openReader(
+      surahIndex: surah.index,
+      initialAyahNumber: bookmark.toAyah,
+    );
+  }
+
+  Future<void> _jumpToManualSelection() async {
+    FocusScope.of(context).unfocus();
+    final surahNumber = int.tryParse(_surahController.text.trim());
+    if (surahNumber == null) {
+      setState(() {
+        _errorText = 'Please enter a surah number from 1 to 114.';
+      });
+      return;
+    }
+
+    final surah = controller.trySurahByIndex(surahNumber);
+    if (surah == null) {
+      setState(() {
+        _errorText = 'Please enter a surah number from 1 to 114.';
+      });
+      return;
+    }
+
+    final ayahText = _ayahController.text.trim();
+    final ayahNumber = ayahText.isEmpty ? null : int.tryParse(ayahText);
+    if (ayahText.isNotEmpty && ayahNumber == null) {
+      setState(() => _errorText = 'Please enter numbers only.');
+      return;
+    }
+
+    if (ayahNumber != null &&
+        (ayahNumber < 1 || ayahNumber > surah.ayahCount)) {
+      setState(() {
+        _errorText =
+            'Please enter an ayah number from 1 to ${surah.ayahCount}.';
+      });
+      return;
+    }
+
+    await _openReader(
+      surahIndex: surah.index,
+      initialAyahNumber: ayahNumber,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bookmark = controller.lastSavedRangeBookmark;
+    final selectedSurah = _selectedSurah;
+    final bookmarkedSurah = bookmark == null
+        ? null
+        : controller.trySurahByIndex(bookmark.surahIndex);
+
+    return AlertDialog(
+      title: const Text('Jump in Quran'),
+      content: SizedBox(
+        width: 440,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Resume the most recently saved range, or jump directly to a surah and ayah.',
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Last saved range',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(
+                    bookmark == null || bookmarkedSurah == null
+                        ? 'No saved range bookmarked yet. Save a range from the reader first.'
+                        : 'Surah ${bookmark.surahIndex}: ${bookmarkedSurah.englishName}\nAyah ${bookmark.fromAyah} to ${bookmark.toAyah}',
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Manual jump',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Surah numbers always use the standard Quran order (1-114), even when the home list is chronological.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      key: const Key('jump-surah-field'),
+                      controller: _surahController,
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) => setState(() => _errorText = ''),
+                      decoration: const InputDecoration(
+                        labelText: 'Surah number',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      key: const Key('jump-ayah-field'),
+                      controller: _ayahController,
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) => setState(() => _errorText = ''),
+                      decoration: const InputDecoration(
+                        labelText: 'Ayah number (optional)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                selectedSurah == null
+                    ? 'Enter a valid surah number to preview its name and ayah count.'
+                    : 'Surah ${selectedSurah.index}: ${selectedSurah.englishName} • ${selectedSurah.ayahCount} ayahs',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              if (_errorText.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _errorText,
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.error,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+        OutlinedButton(
+          key: const Key('jump-last-saved-button'),
+          onPressed: bookmark == null ? null : _jumpToLastSavedRange,
+          child: const Text('Resume last saved'),
+        ),
+        FilledButton(
+          key: const Key('jump-manual-button'),
+          onPressed: _jumpToManualSelection,
+          child: const Text('Jump'),
+        ),
+      ],
     );
   }
 }
@@ -433,6 +699,7 @@ class _SurahTile extends StatelessWidget {
 
     return Card(
       child: ListTile(
+        minVerticalPadding: 12,
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute<void>(
@@ -476,19 +743,26 @@ class _SurahTile extends StatelessWidget {
                 formatPercent(percent),
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w700,
+                      fontSize: 12,
                     ),
               ),
-              Checkbox(
-                key: Key('surah-complete-${surah.index}'),
-                value: isComplete,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                visualDensity: VisualDensity.compact,
-                onChanged: (value) {
-                  if (value == null) {
-                    return;
-                  }
-                  controller.toggleSurahComplete(surah, value);
-                },
+              Transform.scale(
+                scale: 0.8,
+                child: Checkbox(
+                  key: Key('surah-complete-${surah.index}'),
+                  value: isComplete,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: const VisualDensity(
+                    horizontal: -4,
+                    vertical: -4,
+                  ),
+                  onChanged: (value) {
+                    if (value == null) {
+                      return;
+                    }
+                    controller.toggleSurahComplete(surah, value);
+                  },
+                ),
               ),
             ],
           ),

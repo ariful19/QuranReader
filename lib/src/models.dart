@@ -51,17 +51,16 @@ extension TajweedLegendBucketStorage on TajweedLegendBucket {
         TajweedLegendBucket.ikhfa => 'ikhfa',
         TajweedLegendBucket.idghamWithGhunnah => 'idgham_with_ghunnah',
         TajweedLegendBucket.iqlab => 'iqlab',
-        TajweedLegendBucket.idghamWithoutGhunnah =>
-          'idgham_without_ghunnah',
+        TajweedLegendBucket.idghamWithoutGhunnah => 'idgham_without_ghunnah',
         TajweedLegendBucket.izhar => 'izhar',
         TajweedLegendBucket.qalqalah => 'qalqalah',
       };
 
   static TajweedLegendBucket? fromStorage(String? value) {
     return TajweedLegendBucket.values.cast<TajweedLegendBucket?>().firstWhere(
-      (bucket) => bucket?.storageValue == value,
-      orElse: () => null,
-    );
+          (bucket) => bucket?.storageValue == value,
+          orElse: () => null,
+        );
   }
 }
 
@@ -297,6 +296,35 @@ class SurahProgress {
 }
 
 @immutable
+class LastSavedRangeBookmark {
+  const LastSavedRangeBookmark({
+    required this.surahIndex,
+    required this.fromAyah,
+    required this.toAyah,
+  });
+
+  final int surahIndex;
+  final int fromAyah;
+  final int toAyah;
+
+  Map<String, Object?> toJson() {
+    return {
+      'surahIndex': surahIndex,
+      'fromAyah': fromAyah,
+      'toAyah': toAyah,
+    };
+  }
+
+  factory LastSavedRangeBookmark.fromJson(Map<String, Object?> json) {
+    return LastSavedRangeBookmark(
+      surahIndex: json['surahIndex'] as int,
+      fromAyah: json['fromAyah'] as int,
+      toAyah: json['toAyah'] as int,
+    );
+  }
+}
+
+@immutable
 class GoalState {
   const GoalState({
     required this.goalDate,
@@ -376,8 +404,7 @@ class ReaderSettings {
     return ReaderSettings(
       fontSize: (json['fontSize'] as num?)?.toDouble() ?? defaultFontSize,
       backgroundKey: json['backgroundKey'] as String? ?? defaultBackgroundKey,
-      tajweedEnabled:
-          json['tajweedEnabled'] as bool? ?? defaultTajweedEnabled,
+      tajweedEnabled: json['tajweedEnabled'] as bool? ?? defaultTajweedEnabled,
     ).normalized();
   }
 }
@@ -389,12 +416,14 @@ class PersistedState {
     required this.progressBySurah,
     required this.goalState,
     required this.readerSettings,
+    required this.lastSavedRangeBookmark,
   });
 
   final SurahOrderMode orderMode;
   final Map<int, SurahProgress> progressBySurah;
   final GoalState? goalState;
   final ReaderSettings readerSettings;
+  final LastSavedRangeBookmark? lastSavedRangeBookmark;
 
   Map<String, Object?> toJson() {
     return {
@@ -404,6 +433,7 @@ class PersistedState {
       ),
       'goalState': goalState?.toJson(),
       'readerSettings': readerSettings.toJson(),
+      'lastSavedRangeBookmark': lastSavedRangeBookmark?.toJson(),
     };
   }
 
@@ -433,6 +463,12 @@ class PersistedState {
             value.map((key, mapValue) => MapEntry(key as String, mapValue)),
           ),
         _ => ReaderSettings.defaults,
+      },
+      lastSavedRangeBookmark: switch (json['lastSavedRangeBookmark']) {
+        final Map<Object?, Object?> value => LastSavedRangeBookmark.fromJson(
+            value.map((key, mapValue) => MapEntry(key as String, mapValue)),
+          ),
+        _ => null,
       },
     );
   }
@@ -545,7 +581,8 @@ List<TajweedRun> normalizeTajweedRunsForDisplay(List<TajweedRun> runs) {
 
   for (final run in runs) {
     var current = run;
-    if (startsWithArabicMarkOrAnnotation(current.text) && normalized.isNotEmpty) {
+    if (startsWithArabicMarkOrAnnotation(current.text) &&
+        normalized.isNotEmpty) {
       final previous = normalized.removeLast();
       final previousClusters = splitArabicTextClusters(previous.text);
       if (previousClusters.isNotEmpty) {
