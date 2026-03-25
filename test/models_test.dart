@@ -30,6 +30,20 @@ void main() {
     ]);
   });
 
+  test('normalizeTajweedRunsForDisplay moves the base letter with leading marks', () {
+    final normalized = normalizeTajweedRunsForDisplay([
+      const TajweedRun(text: '\u0644'),
+      const TajweedRun(
+        text: '\u0651\u0650\u0644\u0652\u0645\u064f',
+        bucket: TajweedLegendBucket.idghamWithGhunnah,
+      ),
+    ]);
+
+    expect(normalized, hasLength(1));
+    expect(normalized.single.bucket, TajweedLegendBucket.idghamWithGhunnah);
+    expect(normalized.single.text, '\u0644\u0651\u0650\u0644\u0652\u0645\u064f');
+  });
+
   test('suggestedRangeForTappedAyah follows the nearest unfinished gap', () {
     final firstSuggestion = suggestedRangeForTappedAyah(
       savedRanges: const [],
@@ -70,5 +84,23 @@ void main() {
       state.readerSettings.backgroundKey,
       ReaderSettings.defaultBackgroundKey,
     );
+    expect(
+      state.readerSettings.tajweedEnabled,
+      ReaderSettings.defaultTajweedEnabled,
+    );
+  });
+
+  test('reader settings round-trip tajweed preference', () {
+    final settings = const ReaderSettings(
+      fontSize: 35,
+      backgroundKey: 'mist',
+      tajweedEnabled: true,
+    );
+
+    final restored = ReaderSettings.fromJson(settings.toJson());
+
+    expect(restored.fontSize, 35);
+    expect(restored.backgroundKey, 'mist');
+    expect(restored.tajweedEnabled, isTrue);
   });
 }

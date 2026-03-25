@@ -12,23 +12,27 @@ class QuranAppController extends ChangeNotifier {
   QuranAppController({
     required CatalogSource catalogSource,
     required AppStateStore appStateStore,
+    TajweedSource? tajweedSource,
     AiSecretsStore? aiSecretsStore,
     AiCacheRepository? aiCacheRepository,
     GeminiClient? geminiClient,
   })  : _catalogSource = catalogSource,
-        _appStateStore = appStateStore,
-        _aiSecretsStore = aiSecretsStore ?? MemoryAiSecretsStore(),
-        _aiCacheRepository = aiCacheRepository ?? MemoryAiCacheRepository(),
-        _geminiClient = geminiClient ?? GeminiClient();
+         _appStateStore = appStateStore,
+         _tajweedSource = tajweedSource ?? const EmptyTajweedSource(),
+         _aiSecretsStore = aiSecretsStore ?? MemoryAiSecretsStore(),
+         _aiCacheRepository = aiCacheRepository ?? MemoryAiCacheRepository(),
+         _geminiClient = geminiClient ?? GeminiClient();
 
   final CatalogSource _catalogSource;
   final AppStateStore _appStateStore;
+  final TajweedSource _tajweedSource;
   final AiSecretsStore _aiSecretsStore;
   final AiCacheRepository _aiCacheRepository;
   final GeminiClient _geminiClient;
 
   bool _isReady = false;
   List<SurahData> _catalog = const [];
+  Map<int, Map<int, TajweedAyahData>> _tajweedBySurah = const {};
   Map<int, SurahProgress> _progressBySurah = const {};
   SurahOrderMode _orderMode = SurahOrderMode.normal;
   GoalState? _goalState;
@@ -39,6 +43,7 @@ class QuranAppController extends ChangeNotifier {
     final controller = QuranAppController(
       catalogSource: const AssetQuranCatalogSource(),
       appStateStore: await SharedPreferencesAppStateStore.create(),
+      tajweedSource: const AssetTajweedSource(),
       aiSecretsStore: FlutterSecureAiSecretsStore(),
       aiCacheRepository: await SqfliteAiCacheRepository.open(),
       geminiClient: GeminiClient(),
@@ -54,6 +59,10 @@ class QuranAppController extends ChangeNotifier {
   GoalState? get goalState => _goalState;
 
   ReaderSettings get readerSettings => _readerSettings;
+
+  TajweedAyahData? tajweedFor(int surahIndex, int ayahNumber) {
+    return _tajweedBySurah[surahIndex]?[ayahNumber];
+  }
 
   bool get hasGeminiApiKey => _hasGeminiApiKey;
 
@@ -138,6 +147,7 @@ class QuranAppController extends ChangeNotifier {
     }
 
     _catalog = await _catalogSource.loadCatalog();
+    _tajweedBySurah = await _tajweedSource.loadTajweed();
     _progressBySurah = {
       for (final surah in _catalog) surah.index: SurahProgress.empty,
     };
@@ -294,6 +304,14 @@ class QuranAppController extends ChangeNotifier {
       return;
     }
     _readerSettings = _readerSettings.copyWith(backgroundKey: backgroundKey);
+    await _persistAndNotify();
+  }
+
+  Future<void> setReaderTajweedEnabled(bool enabled) async {
+    if (_readerSettings.tajweedEnabled == enabled) {
+      return;
+    }
+    _readerSettings = _readerSettings.copyWith(tajweedEnabled: enabled);
     await _persistAndNotify();
   }
 

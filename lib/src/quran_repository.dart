@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/services.dart';
 import 'package:xml/xml.dart';
 
@@ -6,6 +8,10 @@ import 'surah_metadata.dart';
 
 abstract class CatalogSource {
   Future<List<SurahData>> loadCatalog();
+}
+
+abstract class TajweedSource {
+  Future<Map<int, Map<int, TajweedAyahData>>> loadTajweed();
 }
 
 class AssetQuranCatalogSource implements CatalogSource {
@@ -56,4 +62,66 @@ class AssetQuranCatalogSource implements CatalogSource {
     catalog.sort((left, right) => left.index.compareTo(right.index));
     return catalog;
   }
+}
+
+class EmptyTajweedSource implements TajweedSource {
+  const EmptyTajweedSource();
+
+  @override
+  Future<Map<int, Map<int, TajweedAyahData>>> loadTajweed() async {
+    return const {};
+  }
+}
+
+class AssetTajweedSource implements TajweedSource {
+  const AssetTajweedSource({
+    this.assetPath = 'Resources/quran-tajweed.json',
+  });
+
+  final String assetPath;
+
+  @override
+  Future<Map<int, Map<int, TajweedAyahData>>> loadTajweed() async {
+    final jsonString = await rootBundle.loadString(assetPath);
+    return parseTajweedSourceJson(jsonString);
+  }
+}
+
+Map<int, Map<int, TajweedAyahData>> parseTajweedSourceJson(String jsonString) {
+  final decoded = jsonDecode(jsonString) as Map<String, Object?>;
+  final rawChapters = (decoded['chapters'] as List<Object?>? ?? const [])
+      .cast<Map<Object?, Object?>>();
+
+  return {
+    for (final rawChapter in rawChapters)
+      (rawChapter['surahIndex'] as int): {
+        for (final rawAyah in (rawChapter['ayahs'] as List<Object?>? ?? const [])
+            .cast<Map<Object?, Object?>>())
+          (rawAyah['ayahNumber'] as int): _normalizeTajweedAyahData(
+              TajweedAyahData.fromJson(
+                rawAyah.map((key, value) => MapEntry(key as String, value)),
+              ),
+            ),
+      },
+  };
+}
+
+TajweedAyahData _normalizeTajweedAyahData(TajweedAyahData ayah) {
+  return TajweedAyahData(
+    ayahNumber: ayah.ayahNumber,
+    plainText: _normalizeTajweedText(ayah.plainText),
+    runs: ayah.runs
+        .map(
+          (run) => run.copyWith(
+            text: _normalizeTajweedText(run.text),
+          ),
+        )
+        .toList(growable: false),
+  );
+}
+
+String _normalizeTajweedText(String text) {
+  // Quran.com emits U+0672 in many words such as "ذَٰلِكَ" and "الصَّلَوٰةَ".
+  // Our bundled Arabic font renders U+0670 correctly but not U+0672.
+  return text.replaceAll('\u0672', '\u0670');
 }

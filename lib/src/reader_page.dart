@@ -97,6 +97,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
   Future<void> _showReaderSettingsDialog() async {
     var selectedFontSize = controller.readerSettings.fontSize;
     var selectedBackgroundKey = controller.readerSettings.backgroundKey;
+    var selectedTajweedEnabled = controller.readerSettings.tajweedEnabled;
 
     await showDialog<void>(
       context: context,
@@ -144,10 +145,10 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                         style: Theme.of(context).textTheme.titleMedium,
                       ),
                       const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        children: [
+                       Wrap(
+                         spacing: 12,
+                         runSpacing: 12,
+                         children: [
                           for (final palette in _readerPalettes)
                             _BackgroundChoice(
                               key: Key(
@@ -161,12 +162,27 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                                   selectedBackgroundKey = palette.keyName;
                                 });
                               },
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                             ),
+                         ],
+                       ),
+                       const SizedBox(height: 24),
+                       SwitchListTile.adaptive(
+                         key: const Key('reader-tajweed-switch'),
+                         contentPadding: EdgeInsets.zero,
+                         title: const Text('Tajweed colors'),
+                         subtitle: const Text(
+                           'Show color-coded tajweed rules in the Quran text.',
+                         ),
+                         value: selectedTajweedEnabled,
+                         onChanged: (value) {
+                           setState(() {
+                             selectedTajweedEnabled = value;
+                           });
+                         },
+                       ),
+                     ],
+                   ),
+                 ),
               ),
               actions: [
                 TextButton(
@@ -175,14 +191,17 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                 ),
                 FilledButton(
                   key: const Key('save-reader-settings-button'),
-                  onPressed: () async {
-                    await controller.setReaderFontSize(selectedFontSize);
-                    await controller.setReaderBackgroundKey(
-                      selectedBackgroundKey,
-                    );
-                    if (!dialogContext.mounted) {
-                      return;
-                    }
+                   onPressed: () async {
+                     await controller.setReaderFontSize(selectedFontSize);
+                     await controller.setReaderBackgroundKey(
+                       selectedBackgroundKey,
+                     );
+                     await controller.setReaderTajweedEnabled(
+                       selectedTajweedEnabled,
+                     );
+                     if (!dialogContext.mounted) {
+                       return;
+                     }
                     Navigator.of(dialogContext).pop();
                   },
                   child: const Text('Apply'),
@@ -509,6 +528,8 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
   GlobalKey Function(int ayahNumber) get ayahAnchorKeyFor =>
       widget.ayahAnchorKeyFor;
 
+  bool get _tajweedEnabled => controller.readerSettings.tajweedEnabled;
+
   @override
   Widget build(BuildContext context) {
     final baseStyle = Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -567,54 +588,47 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
     var offset = 0;
 
     for (final ayah in surah.ayahs) {
+      final tajweedData = _tajweedEnabled
+          ? controller.tajweedFor(surah.index, ayah.number)
+          : null;
+      final ayahText = tajweedData?.plainText ?? ayah.renderedText;
+      final displayRuns = normalizeTajweedRunsForDisplay(
+        tajweedData?.runs ?? [TajweedRun(text: ayahText)],
+      );
       final savedColor = controller.isAyahSaved(surah, ayah.number)
           ? palette.savedAyahColor
           : Colors.transparent;
-      final tokenMatches = RegExp(r'\s+|\S+').allMatches(ayah.renderedText);
+      final tokenMatches = RegExp(r'\s+|\S+').allMatches(ayahText);
       var occurrenceIndex = 0;
 
       for (final match in tokenMatches) {
         final token = match.group(0) ?? '';
-        final tokenStyle = TextStyle(backgroundColor: savedColor);
         if (token.trim().isEmpty) {
-          spans.add(TextSpan(text: token, style: tokenStyle));
-          offset += token.length;
           continue;
         }
 
         occurrenceIndex += 1;
-        final start = offset;
-        spans.add(
-          TextSpan(
-            style: tokenStyle,
-            children: [
-              for (final run in splitQuranTextRuns(token))
-                TextSpan(
-                  text: run.text,
-                  style: TextStyle(
-                    fontFamily: run.isAnnotation ? 'MeQuran' : null,
-                    backgroundColor: savedColor,
-                  ),
-                ),
-            ],
-          ),
-        );
-        offset += token.length;
         wordTargets.add(
           _InteractiveWordTarget(
-            range: TextRange(start: start, end: offset),
+            range: TextRange(
+              start: offset + match.start,
+              end: offset + match.end,
+            ),
             ayahNumber: ayah.number,
             request: WordInsightRequest(
               surahIndex: surah.index,
               surahName: surah.englishName,
               ayahNumber: ayah.number,
-              ayahText: ayah.renderedText,
+              ayahText: ayahText,
               word: token,
               occurrenceIndex: occurrenceIndex,
             ),
           ),
         );
       }
+
+      spans.add(_buildAyahTextSpan(displayRuns, savedColor));
+      offset += ayahText.length;
 
       spans.add(
         WidgetSpan(
@@ -642,7 +656,7 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
                     surahIndex: surah.index,
                     surahName: surah.englishName,
                     ayahNumber: ayah.number,
-                    ayahText: ayah.renderedText,
+                    ayahText: ayahText,
                   ),
                 );
               },
@@ -663,6 +677,31 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
       spans: spans,
       wordTargets: wordTargets,
     );
+  }
+
+  InlineSpan _buildAyahTextSpan(List<TajweedRun> runs, Color savedColor) {
+    return TextSpan(
+      style: TextStyle(backgroundColor: savedColor),
+      children: [
+        for (final run in runs)
+          for (final splitRun in splitQuranTextRuns(run.text))
+            TextSpan(
+              text: splitRun.text,
+              style: TextStyle(
+                fontFamily: splitRun.isAnnotation ? 'MeQuran' : null,
+                color: _colorForTajweedBucket(run.bucket),
+                backgroundColor: savedColor,
+              ),
+            ),
+      ],
+    );
+  }
+
+  Color? _colorForTajweedBucket(TajweedLegendBucket? bucket) {
+    if (bucket == null) {
+      return null;
+    }
+    return _tajweedLegendColors[bucket];
   }
 
   _InteractiveWordTarget? _wordTargetForOffset(
@@ -735,6 +774,15 @@ class _AyahMarker extends StatelessWidget {
     );
   }
 }
+
+const Map<TajweedLegendBucket, Color> _tajweedLegendColors = {
+  TajweedLegendBucket.ikhfa: Color(0xFFA25203),
+  TajweedLegendBucket.idghamWithGhunnah: Color(0xFFB70101),
+  TajweedLegendBucket.iqlab: Color(0xFF9C36AC),
+  TajweedLegendBucket.idghamWithoutGhunnah: Color(0xFF707070),
+  TajweedLegendBucket.izhar: Color(0xFF3365C8),
+  TajweedLegendBucket.qalqalah: Color(0xFF237501),
+};
 
 class _FullscreenToolbar extends StatelessWidget {
   const _FullscreenToolbar({

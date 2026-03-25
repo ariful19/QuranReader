@@ -12,6 +12,7 @@ void main() {
   testWidgets('opens reader and saves a tapped ayah range', (tester) async {
     final controller = QuranAppController(
       catalogSource: _FakeCatalogSource(),
+      tajweedSource: const _FakeTajweedSource(),
       appStateStore: _MemoryStateStore(),
     );
     await controller.load();
@@ -47,6 +48,7 @@ void main() {
       (tester) async {
     final controller = QuranAppController(
       catalogSource: _FakeCatalogSource(),
+      tajweedSource: const _FakeTajweedSource(),
       appStateStore: _MemoryStateStore(),
     );
     await controller.load();
@@ -73,11 +75,23 @@ void main() {
 
     await tester.tap(find.byKey(const Key('reader-background-midnight')));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('reader-tajweed-switch')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('reader-tajweed-switch')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('save-reader-settings-button')));
     await tester.pumpAndSettle();
 
     expect(controller.readerSettings.backgroundKey, 'midnight');
     expect(controller.readerSettings.fontSize, greaterThan(33));
+    expect(controller.readerSettings.tajweedEnabled, isTrue);
+    final readerRichText = tester
+        .widgetList<RichText>(find.byType(RichText))
+        .firstWhere((candidate) => candidate.textAlign == TextAlign.justify);
+    expect(
+      readerRichText.text.toPlainText(),
+      contains('tajweed sample 1'),
+    );
 
     expect(find.byKey(const Key('reader-progress-card')), findsOneWidget);
 
@@ -245,5 +259,37 @@ class _MemoryStateStore implements AppStateStore {
   @override
   Future<void> save(PersistedState state) async {
     _state = state;
+  }
+}
+
+class _FakeTajweedSource implements TajweedSource {
+  const _FakeTajweedSource();
+
+  @override
+  Future<Map<int, Map<int, TajweedAyahData>>> loadTajweed() async {
+    return {
+      1: {
+        for (var ayahNumber = 1; ayahNumber <= 20; ayahNumber += 1)
+          ayahNumber: TajweedAyahData(
+            ayahNumber: ayahNumber,
+            plainText: ayahNumber == 1
+                ? 'tajweed sample 1'
+                : 'Ø§ÙŠØ© $ayahNumber Ù…Ù† Ø³ÙˆØ±Ø© Ø§Ù„Ø§Ø®ØªØ¨Ø§Ø±',
+            runs: [
+              TajweedRun(
+                text: ayahNumber == 1 ? 'tajweed ' : 'Ø§ÙŠØ© ',
+                bucket: ayahNumber == 1
+                    ? TajweedLegendBucket.idghamWithGhunnah
+                    : null,
+              ),
+              TajweedRun(
+                text: ayahNumber == 1
+                    ? 'sample 1'
+                    : '$ayahNumber Ù…Ù† Ø³ÙˆØ±Ø© Ø§Ù„Ø§Ø®ØªØ¨Ø§Ø±',
+              ),
+            ],
+          ),
+      },
+    };
   }
 }

@@ -27,6 +27,7 @@ flutter:
   uses-material-design: true
   assets:
     - Resources/quran-uthmani.xml
+    - Resources/quran-tajweed.json
   fonts:
     - family: KFGQPC
       fonts:

@@ -37,6 +37,106 @@ class QuranTextRun {
   final bool isAnnotation;
 }
 
+enum TajweedLegendBucket {
+  ikhfa,
+  idghamWithGhunnah,
+  iqlab,
+  idghamWithoutGhunnah,
+  izhar,
+  qalqalah,
+}
+
+extension TajweedLegendBucketStorage on TajweedLegendBucket {
+  String get storageValue => switch (this) {
+        TajweedLegendBucket.ikhfa => 'ikhfa',
+        TajweedLegendBucket.idghamWithGhunnah => 'idgham_with_ghunnah',
+        TajweedLegendBucket.iqlab => 'iqlab',
+        TajweedLegendBucket.idghamWithoutGhunnah =>
+          'idgham_without_ghunnah',
+        TajweedLegendBucket.izhar => 'izhar',
+        TajweedLegendBucket.qalqalah => 'qalqalah',
+      };
+
+  static TajweedLegendBucket? fromStorage(String? value) {
+    return TajweedLegendBucket.values.cast<TajweedLegendBucket?>().firstWhere(
+      (bucket) => bucket?.storageValue == value,
+      orElse: () => null,
+    );
+  }
+}
+
+@immutable
+class TajweedRun {
+  const TajweedRun({
+    required this.text,
+    this.bucket,
+  });
+
+  final String text;
+  final TajweedLegendBucket? bucket;
+
+  TajweedRun copyWith({
+    String? text,
+    TajweedLegendBucket? bucket,
+  }) {
+    return TajweedRun(
+      text: text ?? this.text,
+      bucket: bucket ?? this.bucket,
+    );
+  }
+
+  Map<String, Object?> toJson() {
+    return {
+      'text': text,
+      'bucket': bucket?.storageValue,
+    };
+  }
+
+  factory TajweedRun.fromJson(Map<String, Object?> json) {
+    return TajweedRun(
+      text: json['text'] as String? ?? '',
+      bucket: TajweedLegendBucketStorage.fromStorage(json['bucket'] as String?),
+    );
+  }
+}
+
+@immutable
+class TajweedAyahData {
+  const TajweedAyahData({
+    required this.ayahNumber,
+    required this.plainText,
+    required this.runs,
+  });
+
+  final int ayahNumber;
+  final String plainText;
+  final List<TajweedRun> runs;
+
+  Map<String, Object?> toJson() {
+    return {
+      'ayahNumber': ayahNumber,
+      'plainText': plainText,
+      'runs': runs.map((run) => run.toJson()).toList(),
+    };
+  }
+
+  factory TajweedAyahData.fromJson(Map<String, Object?> json) {
+    final rawRuns = (json['runs'] as List<Object?>? ?? const [])
+        .cast<Map<Object?, Object?>>();
+    return TajweedAyahData(
+      ayahNumber: json['ayahNumber'] as int,
+      plainText: json['plainText'] as String? ?? '',
+      runs: rawRuns
+          .map(
+            (run) => TajweedRun.fromJson(
+              run.map((key, value) => MapEntry(key as String, value)),
+            ),
+          )
+          .toList(growable: false),
+    );
+  }
+}
+
 @immutable
 class AyahData {
   const AyahData({
@@ -226,27 +326,33 @@ class ReaderSettings {
   const ReaderSettings({
     required this.fontSize,
     required this.backgroundKey,
+    required this.tajweedEnabled,
   });
 
   static const defaultFontSize = 33.0;
   static const minFontSize = 26.0;
   static const maxFontSize = 44.0;
   static const defaultBackgroundKey = 'paper';
+  static const defaultTajweedEnabled = false;
   static const defaults = ReaderSettings(
     fontSize: defaultFontSize,
     backgroundKey: defaultBackgroundKey,
+    tajweedEnabled: defaultTajweedEnabled,
   );
 
   final double fontSize;
   final String backgroundKey;
+  final bool tajweedEnabled;
 
   ReaderSettings copyWith({
     double? fontSize,
     String? backgroundKey,
+    bool? tajweedEnabled,
   }) {
     return ReaderSettings(
       fontSize: fontSize ?? this.fontSize,
       backgroundKey: backgroundKey ?? this.backgroundKey,
+      tajweedEnabled: tajweedEnabled ?? this.tajweedEnabled,
     );
   }
 
@@ -254,6 +360,7 @@ class ReaderSettings {
     return ReaderSettings(
       fontSize: fontSize.clamp(minFontSize, maxFontSize),
       backgroundKey: backgroundKey,
+      tajweedEnabled: tajweedEnabled,
     );
   }
 
@@ -261,6 +368,7 @@ class ReaderSettings {
     return {
       'fontSize': fontSize,
       'backgroundKey': backgroundKey,
+      'tajweedEnabled': tajweedEnabled,
     };
   }
 
@@ -268,6 +376,8 @@ class ReaderSettings {
     return ReaderSettings(
       fontSize: (json['fontSize'] as num?)?.toDouble() ?? defaultFontSize,
       backgroundKey: json['backgroundKey'] as String? ?? defaultBackgroundKey,
+      tajweedEnabled:
+          json['tajweedEnabled'] as bool? ?? defaultTajweedEnabled,
     ).normalized();
   }
 }
@@ -368,6 +478,91 @@ String formatPercent(double value) {
 
 bool isQuranAnnotationRune(int rune) {
   return rune >= 0x06D6 && rune <= 0x06ED;
+}
+
+bool isArabicMarkOrAnnotationRune(int rune) {
+  return (rune >= 0x064B && rune <= 0x065F) ||
+      rune == 0x0670 ||
+      isQuranAnnotationRune(rune);
+}
+
+bool startsWithArabicMarkOrAnnotation(String text) {
+  if (text.isEmpty) {
+    return false;
+  }
+  return isArabicMarkOrAnnotationRune(text.runes.first);
+}
+
+List<String> splitArabicTextClusters(String text) {
+  final clusters = <String>[];
+  final buffer = StringBuffer();
+
+  void flush() {
+    if (buffer.isEmpty) {
+      return;
+    }
+    clusters.add(buffer.toString());
+    buffer.clear();
+  }
+
+  for (final rune in text.runes) {
+    if (buffer.isEmpty) {
+      buffer.writeCharCode(rune);
+      continue;
+    }
+
+    if (isArabicMarkOrAnnotationRune(rune)) {
+      buffer.writeCharCode(rune);
+      continue;
+    }
+
+    flush();
+    buffer.writeCharCode(rune);
+  }
+
+  flush();
+  return clusters;
+}
+
+List<TajweedRun> normalizeTajweedRunsForDisplay(List<TajweedRun> runs) {
+  final normalized = <TajweedRun>[];
+
+  void appendRun(TajweedRun run) {
+    if (run.text.isEmpty) {
+      return;
+    }
+    if (normalized.isNotEmpty && normalized.last.bucket == run.bucket) {
+      final previous = normalized.removeLast();
+      normalized.add(
+        previous.copyWith(
+          text: previous.text + run.text,
+        ),
+      );
+      return;
+    }
+    normalized.add(run);
+  }
+
+  for (final run in runs) {
+    var current = run;
+    if (startsWithArabicMarkOrAnnotation(current.text) && normalized.isNotEmpty) {
+      final previous = normalized.removeLast();
+      final previousClusters = splitArabicTextClusters(previous.text);
+      if (previousClusters.isNotEmpty) {
+        final movedCluster = previousClusters.removeLast();
+        final remainingPrevious = previousClusters.join();
+        if (remainingPrevious.isNotEmpty) {
+          normalized.add(previous.copyWith(text: remainingPrevious));
+        }
+        current = current.copyWith(text: movedCluster + current.text);
+      } else {
+        normalized.add(previous);
+      }
+    }
+    appendRun(current);
+  }
+
+  return normalized;
 }
 
 List<QuranTextRun> splitQuranTextRuns(String text) {
