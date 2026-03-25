@@ -207,7 +207,8 @@ List<Map<String, Object?>> _applyDerivedIzhar(List<Map<String, Object?>> runs) {
     }
 
     final nextBaseLetter = _nextArabicBaseLetter(clusters, index + 1);
-    if (nextBaseLetter == null || !_izharThroatLetters.contains(nextBaseLetter)) {
+    if (nextBaseLetter == null ||
+        !_izharThroatLetters.contains(nextBaseLetter)) {
       continue;
     }
 
@@ -230,7 +231,7 @@ List<Map<String, Object?>> _mergeMappedRuns(List<Map<String, Object?>> runs) {
     }
     final bucket = run['bucket'] as String?;
     if (merged.isNotEmpty && merged.last['bucket'] == bucket) {
-      merged.last['text'] = '${merged.last['text']}${text}';
+      merged.last['text'] = '${merged.last['text']}$text';
       continue;
     }
     merged.add({
@@ -346,12 +347,12 @@ const Set<String> _izharThroatLetters = {
 String? _bucketForRawClass(String? rawClass) {
   return switch (rawClass) {
     'ikhafa' || 'ikhafa_shafawi' => 'ikhfa',
-    'ghunnah' || 'idgham_ghunnah' || 'idgham_shafawi' =>
-      'idgham_with_ghunnah',
+    'ghunnah' || 'idgham_ghunnah' || 'idgham_shafawi' => 'idgham_with_ghunnah',
     'iqlab' => 'iqlab',
     'idgham_wo_ghunnah' ||
     'idgham_mutajanisayn' ||
-    'idgham_mutaqaribayn' => 'idgham_without_ghunnah',
+    'idgham_mutaqaribayn' =>
+      'idgham_without_ghunnah',
     'qalaqah' => 'qalqalah',
     _ => null,
   };

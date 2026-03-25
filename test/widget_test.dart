@@ -9,6 +9,26 @@ import 'package:quran_reader/src/quran_repository.dart';
 import 'package:quran_reader/src/reader_page.dart';
 
 void main() {
+  test('removing the bookmarked merged range clears the last saved bookmark',
+      () async {
+    final controller = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await controller.saveRange(
+      surah: controller.surahByIndex(1),
+      fromAyah: 2,
+      toAyah: 8,
+    );
+    expect(controller.lastSavedRangeBookmark, isNotNull);
+
+    await controller.removeRangeAt(1, 0);
+
+    expect(controller.lastSavedRangeBookmark, isNull);
+  });
+
   testWidgets('opens reader and saves a tapped ayah range', (tester) async {
     final controller = QuranAppController(
       catalogSource: _FakeCatalogSource(),
@@ -42,6 +62,8 @@ void main() {
 
     expect(find.text('Ayah 1 to 1'), findsWidgets);
     expect(controller.rangesFor(1), hasLength(1));
+    expect(controller.lastSavedRangeBookmark, isNotNull);
+    expect(controller.lastSavedRangeBookmark!.toAyah, 1);
   });
 
   testWidgets('reader settings and fullscreen mode update the reader',
@@ -221,6 +243,172 @@ void main() {
     );
     expect(scrollViewRestored.controller!.offset, greaterThan(0));
   });
+
+  testWidgets('reader swipe left to right opens the next surah',
+      (tester) async {
+    final controller = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: SurahReaderPage(
+          controller: controller,
+          surahIndex: 1,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.fling(
+      find.byKey(const Key('reader-swipe-area')),
+      const Offset(400, 0),
+      1500,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('ayah-2-1')), findsOneWidget);
+    expect(find.text('The Cow'), findsOneWidget);
+  });
+
+  testWidgets('reader swipe right to left opens the previous surah',
+      (tester) async {
+    final controller = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: SurahReaderPage(
+          controller: controller,
+          surahIndex: 2,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.fling(
+      find.byKey(const Key('reader-swipe-area')),
+      const Offset(-400, 0),
+      1500,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('ayah-1-1')), findsOneWidget);
+    expect(find.text('The Opening'), findsOneWidget);
+  });
+
+  testWidgets('home jump dialog resumes the globally bookmarked saved range',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+    await controller.saveRange(
+      surah: controller.surahByIndex(1),
+      fromAyah: 2,
+      toAyah: 8,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: QuranHomePage(controller: controller),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('jump-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('jump-last-saved-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    final scrollView = tester.widget<SingleChildScrollView>(
+      find.byKey(const Key('reader-scroll-view')),
+    );
+    expect(scrollView.controller!.offset, greaterThan(0));
+  });
+
+  testWidgets('home jump dialog manually jumps to a specific ayah',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: QuranHomePage(controller: controller),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('jump-button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('jump-surah-field')), '2');
+    await tester.enterText(find.byKey(const Key('jump-ayah-field')), '10');
+    await tester.tap(find.byKey(const Key('jump-manual-button')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    final scrollView = tester.widget<SingleChildScrollView>(
+      find.byKey(const Key('reader-scroll-view')),
+    );
+    expect(scrollView.controller!.offset, greaterThan(0));
+    expect(find.byKey(const Key('ayah-2-10')), findsOneWidget);
+  });
+
+  testWidgets('manual jump validates ayah numbers against the selected surah',
+      (tester) async {
+    final controller = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: QuranHomePage(controller: controller),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('jump-button')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('jump-surah-field')), '2');
+    await tester.enterText(find.byKey(const Key('jump-ayah-field')), '99');
+    await tester.tap(find.byKey(const Key('jump-manual-button')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Please enter an ayah number from 1 to 12.'),
+      findsOneWidget,
+    );
+    expect(find.byType(SurahReaderPage), findsNothing);
+  });
 }
 
 class _FakeCatalogSource implements CatalogSource {
@@ -238,6 +426,20 @@ class _FakeCatalogSource implements CatalogSource {
           (index) => AyahData(
             number: index + 1,
             text: 'اية ${index + 1} من سورة الاختبار',
+          ),
+        ),
+      ),
+      SurahData(
+        index: 2,
+        arabicName: 'البقرة',
+        englishName: 'The Cow',
+        chronologicalOrder: 87,
+        totalUnicodeChars: 180,
+        ayahs: List.generate(
+          12,
+          (index) => AyahData(
+            number: index + 1,
+            text: 'آية ${index + 1} من سورة البقرة',
           ),
         ),
       ),

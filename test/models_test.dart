@@ -30,7 +30,9 @@ void main() {
     ]);
   });
 
-  test('normalizeTajweedRunsForDisplay moves the base letter with leading marks', () {
+  test(
+      'normalizeTajweedRunsForDisplay moves the base letter with leading marks',
+      () {
     final normalized = normalizeTajweedRunsForDisplay([
       const TajweedRun(text: '\u0644'),
       const TajweedRun(
@@ -41,7 +43,8 @@ void main() {
 
     expect(normalized, hasLength(1));
     expect(normalized.single.bucket, TajweedLegendBucket.idghamWithGhunnah);
-    expect(normalized.single.text, '\u0644\u0651\u0650\u0644\u0652\u0645\u064f');
+    expect(
+        normalized.single.text, '\u0644\u0651\u0650\u0644\u0652\u0645\u064f');
   });
 
   test('suggestedRangeForTappedAyah follows the nearest unfinished gap', () {
@@ -91,7 +94,7 @@ void main() {
   });
 
   test('reader settings round-trip tajweed preference', () {
-    final settings = const ReaderSettings(
+    const settings = ReaderSettings(
       fontSize: 35,
       backgroundKey: 'mist',
       tajweedEnabled: true,
@@ -102,5 +105,26 @@ void main() {
     expect(restored.fontSize, 35);
     expect(restored.backgroundKey, 'mist');
     expect(restored.tajweedEnabled, isTrue);
+  });
+
+  test('persisted state round-trips last saved range bookmark', () {
+    const state = PersistedState(
+      orderMode: SurahOrderMode.normal,
+      progressBySurah: {},
+      goalState: null,
+      readerSettings: ReaderSettings.defaults,
+      lastSavedRangeBookmark: LastSavedRangeBookmark(
+        surahIndex: 2,
+        fromAyah: 5,
+        toAyah: 7,
+      ),
+    );
+
+    final restored = PersistedState.fromJson(state.toJson());
+
+    expect(restored.lastSavedRangeBookmark, isNotNull);
+    expect(restored.lastSavedRangeBookmark!.surahIndex, 2);
+    expect(restored.lastSavedRangeBookmark!.fromAyah, 5);
+    expect(restored.lastSavedRangeBookmark!.toAyah, 7);
   });
 }
