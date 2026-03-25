@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'app_controller.dart';
 import 'home_page.dart';
+import 'screen_awake_manager.dart';
 
 class QuranReaderBootstrap extends StatefulWidget {
   const QuranReaderBootstrap({super.key});
@@ -25,6 +26,12 @@ class _QuranReaderBootstrapState extends State<QuranReaderBootstrap> {
       debugShowCheckedModeBanner: false,
       title: 'QuranReader',
       theme: _buildTheme(),
+      builder: (context, child) {
+        if (child == null) {
+          return const SizedBox.shrink();
+        }
+        return ScreenAwakeIdleGate(child: child);
+      },
       home: FutureBuilder<QuranAppController>(
         future: _controllerFuture,
         builder: (context, snapshot) {
