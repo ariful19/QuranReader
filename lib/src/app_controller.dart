@@ -17,11 +17,11 @@ class QuranAppController extends ChangeNotifier {
     AiCacheRepository? aiCacheRepository,
     GeminiClient? geminiClient,
   })  : _catalogSource = catalogSource,
-         _appStateStore = appStateStore,
-         _tajweedSource = tajweedSource ?? const EmptyTajweedSource(),
-         _aiSecretsStore = aiSecretsStore ?? MemoryAiSecretsStore(),
-         _aiCacheRepository = aiCacheRepository ?? MemoryAiCacheRepository(),
-         _geminiClient = geminiClient ?? GeminiClient();
+        _appStateStore = appStateStore,
+        _tajweedSource = tajweedSource ?? const EmptyTajweedSource(),
+        _aiSecretsStore = aiSecretsStore ?? MemoryAiSecretsStore(),
+        _aiCacheRepository = aiCacheRepository ?? MemoryAiCacheRepository(),
+        _geminiClient = geminiClient ?? GeminiClient();
 
   final CatalogSource _catalogSource;
   final AppStateStore _appStateStore;
@@ -37,6 +37,7 @@ class QuranAppController extends ChangeNotifier {
   SurahOrderMode _orderMode = SurahOrderMode.normal;
   GoalState? _goalState;
   ReaderSettings _readerSettings = ReaderSettings.defaults;
+  LastSavedRangeBookmark? _lastSavedRangeBookmark;
   bool _hasGeminiApiKey = false;
 
   static Future<QuranAppController> create() async {
@@ -59,6 +60,8 @@ class QuranAppController extends ChangeNotifier {
   GoalState? get goalState => _goalState;
 
   ReaderSettings get readerSettings => _readerSettings;
+
+  LastSavedRangeBookmark? get lastSavedRangeBookmark => _lastSavedRangeBookmark;
 
   TajweedAyahData? tajweedFor(int surahIndex, int ayahNumber) {
     return _tajweedBySurah[surahIndex]?[ayahNumber];
@@ -157,6 +160,7 @@ class QuranAppController extends ChangeNotifier {
       _orderMode = persistedState.orderMode;
       _goalState = persistedState.goalState;
       _readerSettings = persistedState.readerSettings;
+      _lastSavedRangeBookmark = persistedState.lastSavedRangeBookmark;
       _progressBySurah = {
         for (final surah in _catalog)
           surah.index: persistedState.progressBySurah[surah.index] ??
@@ -173,12 +177,33 @@ class QuranAppController extends ChangeNotifier {
     return _catalog.firstWhere((surah) => surah.index == surahIndex);
   }
 
+  SurahData? trySurahByIndex(int surahIndex) {
+    for (final surah in _catalog) {
+      if (surah.index == surahIndex) {
+        return surah;
+      }
+    }
+    return null;
+  }
+
   SurahProgress progressFor(int surahIndex) {
     return _progressBySurah[surahIndex] ?? SurahProgress.empty;
   }
 
   List<AyahRange> rangesFor(int surahIndex) {
     return progressFor(surahIndex).ranges;
+  }
+
+  int? furthestSavedAyahFor(int surahIndex) {
+    final ranges = rangesFor(surahIndex);
+    if (ranges.isEmpty) {
+      return null;
+    }
+
+    return ranges.fold<int>(
+      ranges.first.toAyah,
+      (furthestAyah, range) => math.max(furthestAyah, range.toAyah),
+    );
   }
 
   double percentForSurah(SurahData surah) {
@@ -250,6 +275,11 @@ class QuranAppController extends ChangeNotifier {
       ..._progressBySurah,
       surah.index: SurahProgress(ranges: mergedRanges),
     };
+    _lastSavedRangeBookmark = LastSavedRangeBookmark(
+      surahIndex: surah.index,
+      fromAyah: fromAyah,
+      toAyah: toAyah,
+    );
     await _persistAndNotify();
     return null;
   }
@@ -259,7 +289,14 @@ class QuranAppController extends ChangeNotifier {
     if (rangeIndex < 0 || rangeIndex >= currentRanges.length) {
       return;
     }
-    currentRanges.removeAt(rangeIndex);
+    final removedRange = currentRanges.removeAt(rangeIndex);
+    final currentBookmark = _lastSavedRangeBookmark;
+    if (currentBookmark != null &&
+        currentBookmark.surahIndex == surahIndex &&
+        removedRange.contains(currentBookmark.fromAyah) &&
+        removedRange.contains(currentBookmark.toAyah)) {
+      _lastSavedRangeBookmark = null;
+    }
     _progressBySurah = {
       ..._progressBySurah,
       surahIndex: SurahProgress(ranges: currentRanges),
@@ -318,6 +355,7 @@ class QuranAppController extends ChangeNotifier {
   Future<void> resetAllProgress() async {
     _orderMode = SurahOrderMode.normal;
     _goalState = null;
+    _lastSavedRangeBookmark = null;
     _progressBySurah = {
       for (final surah in _catalog) surah.index: SurahProgress.empty,
     };
@@ -411,6 +449,7 @@ class QuranAppController extends ChangeNotifier {
         progressBySurah: _progressBySurah,
         goalState: _goalState,
         readerSettings: _readerSettings,
+        lastSavedRangeBookmark: _lastSavedRangeBookmark,
       ),
     );
     notifyListeners();
