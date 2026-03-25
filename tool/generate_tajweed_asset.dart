@@ -57,7 +57,10 @@ Future<void> main() async {
         }
 
         final normalizedRuns = _mergeMappedRuns(
-          _applyDerivedIzhar(_trimTrailingWhitespace(displayRuns)),
+          _applyDerivedGhunnah(
+            _applyDerivedIzhar(
+                _normalizeMappedRuns(_trimTrailingWhitespace(displayRuns))),
+          ),
         );
 
         ayahs.add({
@@ -175,6 +178,41 @@ List<Map<String, Object?>> _trimTrailingWhitespace(
   return normalized;
 }
 
+List<Map<String, Object?>> _normalizeMappedRuns(
+    List<Map<String, Object?>> runs) {
+  final normalized = <Map<String, Object?>>[];
+
+  for (final run in runs) {
+    final text = run['text'] as String? ?? '';
+    final bucket = run['bucket'] as String?;
+    for (final cluster in _splitIntoClusters(text)) {
+      if (cluster.isEmpty) {
+        continue;
+      }
+
+      if (_startsWithArabicMarkOrAnnotation(cluster) && normalized.isNotEmpty) {
+        final previous = normalized.removeLast();
+        final previousBucket = previous['bucket'] as String?;
+        final attachedBucket = bucket != null &&
+                (previousBucket == null || previousBucket == bucket)
+            ? bucket
+            : previousBucket;
+        previous['text'] = '${previous['text']}${cluster}';
+        previous['bucket'] = attachedBucket;
+        normalized.add(previous);
+        continue;
+      }
+
+      normalized.add({
+        'text': cluster,
+        'bucket': bucket,
+      });
+    }
+  }
+
+  return normalized;
+}
+
 String _concatenateRuns(List<Map<String, Object?>> runs) {
   return runs.map((run) => run['text'] as String? ?? '').join();
 }
@@ -207,7 +245,8 @@ List<Map<String, Object?>> _applyDerivedIzhar(List<Map<String, Object?>> runs) {
     }
 
     final nextBaseLetter = _nextArabicBaseLetter(clusters, index + 1);
-    if (nextBaseLetter == null || !_izharThroatLetters.contains(nextBaseLetter)) {
+    if (nextBaseLetter == null ||
+        !_izharThroatLetters.contains(nextBaseLetter)) {
       continue;
     }
 
@@ -215,6 +254,21 @@ List<Map<String, Object?>> _applyDerivedIzhar(List<Map<String, Object?>> runs) {
   }
 
   return clusters;
+}
+
+List<Map<String, Object?>> _applyDerivedGhunnah(
+    List<Map<String, Object?>> runs) {
+  return runs.map((run) {
+    final text = run['text'] as String? ?? '';
+    final bucket = run['bucket'] as String?;
+    if (bucket != null || !_isGhunnahSourceCluster(text)) {
+      return run;
+    }
+    return {
+      'text': text,
+      'bucket': 'idgham_with_ghunnah',
+    };
+  }).toList(growable: false);
 }
 
 List<Map<String, Object?>> _mergeMappedRuns(List<Map<String, Object?>> runs) {
@@ -278,8 +332,23 @@ bool _isArabicMarkOrAnnotation(int rune) {
       (rune >= 0x06D6 && rune <= 0x06ED);
 }
 
+bool _startsWithArabicMarkOrAnnotation(String text) {
+  if (text.isEmpty) {
+    return false;
+  }
+  return _isArabicMarkOrAnnotation(text.runes.first);
+}
+
 bool _isIzharSourceCluster(String cluster) {
   return _isNoonSakinahCluster(cluster) || _hasTanween(cluster);
+}
+
+bool _isGhunnahSourceCluster(String cluster) {
+  final baseLetter = _firstArabicBaseLetter(cluster);
+  if (baseLetter != 'ن' && baseLetter != 'م') {
+    return false;
+  }
+  return cluster.contains('\u0651');
 }
 
 bool _isNoonSakinahCluster(String cluster) {
@@ -346,12 +415,12 @@ const Set<String> _izharThroatLetters = {
 String? _bucketForRawClass(String? rawClass) {
   return switch (rawClass) {
     'ikhafa' || 'ikhafa_shafawi' => 'ikhfa',
-    'ghunnah' || 'idgham_ghunnah' || 'idgham_shafawi' =>
-      'idgham_with_ghunnah',
+    'ghunnah' || 'idgham_ghunnah' || 'idgham_shafawi' => 'idgham_with_ghunnah',
     'iqlab' => 'iqlab',
     'idgham_wo_ghunnah' ||
     'idgham_mutajanisayn' ||
-    'idgham_mutaqaribayn' => 'idgham_without_ghunnah',
+    'idgham_mutaqaribayn' =>
+      'idgham_without_ghunnah',
     'qalaqah' => 'qalqalah',
     _ => null,
   };

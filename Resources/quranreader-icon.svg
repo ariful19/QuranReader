@@ -1,0 +1,84 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="128" y1="96" x2="896" y2="928" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0E5A55"/>
+      <stop offset="0.52" stop-color="#0B3F42"/>
+      <stop offset="1" stop-color="#08242D"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(512 330) rotate(90) scale(430)">
+      <stop stop-color="#F8E6A1" stop-opacity="0.9"/>
+      <stop offset="0.55" stop-color="#F8E6A1" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#F8E6A1" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="274" y1="236" x2="750" y2="752" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFF0B7"/>
+      <stop offset="0.3" stop-color="#F4D77A"/>
+      <stop offset="0.68" stop-color="#C99A35"/>
+      <stop offset="1" stop-color="#A87416"/>
+    </linearGradient>
+    <linearGradient id="page" x1="300" y1="520" x2="724" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFDF6"/>
+      <stop offset="1" stop-color="#F2E3BE"/>
+    </linearGradient>
+    <linearGradient id="pageShadow" x1="370" y1="580" x2="694" y2="760" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E6D1A6"/>
+      <stop offset="1" stop-color="#D2B57C"/>
+    </linearGradient>
+    <filter id="softShadow" x="140" y="140" width="744" height="744" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feFlood flood-opacity="0" result="BackgroundImageFix"/>
+      <feColorMatrix in="SourceAlpha" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 127 0" result="hardAlpha"/>
+      <feOffset dy="18"/>
+      <feGaussianBlur stdDeviation="20"/>
+      <feComposite in2="hardAlpha" operator="out"/>
+      <feColorMatrix type="matrix" values="0 0 0 0 0.01 0 0 0 0 0.08 0 0 0 0 0.11 0 0 0 0.35 0"/>
+      <feBlend mode="normal" in2="BackgroundImageFix" result="effect1_dropShadow_1_1"/>
+      <feBlend mode="normal" in="SourceGraphic" in2="effect1_dropShadow_1_1" result="shape"/>
+    </filter>
+    <clipPath id="tileClip">
+      <rect x="96" y="96" width="832" height="832" rx="196"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#tileClip)">
+    <rect x="96" y="96" width="832" height="832" rx="196" fill="url(#bg)"/>
+    <rect x="96" y="96" width="832" height="832" rx="196" fill="url(#glow)"/>
+
+    <path d="M96 784C220 720 335 688 512 688C689 688 804 720 928 784V928H96V784Z" fill="#061A21" fill-opacity="0.45"/>
+
+    <g opacity="0.1">
+      <path d="M512 182L542 240L606 250L560 294L570 357L512 327L454 357L464 294L418 250L482 240L512 182Z" fill="#FFF4C9"/>
+      <path d="M286 280H738" stroke="#FFE9A2" stroke-width="8" stroke-linecap="round"/>
+    </g>
+
+    <g filter="url(#softShadow)">
+      <path d="M288 710V408C288 312 366 234 462 234H562C658 234 736 312 736 408V710" stroke="url(#gold)" stroke-width="34" stroke-linecap="round"/>
+      <path d="M372 313C403 267 454 240 512 240C570 240 621 267 652 313" stroke="#FFF4C5" stroke-opacity="0.72" stroke-width="16" stroke-linecap="round"/>
+
+      <path d="M512 304C409 304 326 387 326 490V646C326 665 341 680 360 680H664C683 680 698 665 698 646V490C698 387 615 304 512 304Z" fill="#0C5552"/>
+      <path d="M512 334C427 334 360 402 360 486V626H664V486C664 402 597 334 512 334Z" fill="#15706B"/>
+
+      <path d="M512 350C444 350 390 405 390 474V594H634V474C634 405 580 350 512 350Z" fill="#F6E29A"/>
+      <path d="M512 380C460 380 418 422 418 474V566H606V474C606 422 564 380 512 380Z" fill="#FFF7D6"/>
+
+      <circle cx="512" cy="446" r="31" fill="#B98221"/>
+      <path d="M512 423L520 440H538L524 451L530 469L512 458L494 469L500 451L486 440H504L512 423Z" fill="#FFF4C8"/>
+
+      <path d="M512 584C451 584 383 594 320 617C297 625 282 646 282 670V693C282 714 299 731 320 731C382 731 451 744 512 783C573 744 642 731 704 731C725 731 742 714 742 693V670C742 646 727 625 704 617C641 594 573 584 512 584Z" fill="url(#page)"/>
+      <path d="M512 584V783C451 744 382 731 320 731C299 731 282 714 282 693V670C282 646 297 625 320 617C383 594 451 584 512 584Z" fill="#FFFDF6"/>
+      <path d="M512 584V783C573 744 642 731 704 731C725 731 742 714 742 693V670C742 646 727 625 704 617C641 594 573 584 512 584Z" fill="url(#pageShadow)"/>
+
+      <path d="M512 608V766" stroke="#C5902A" stroke-width="18" stroke-linecap="round"/>
+      <path d="M418 640C451 634 482 632 512 632" stroke="#CEB172" stroke-width="12" stroke-linecap="round"/>
+      <path d="M418 680C451 674 482 672 512 672" stroke="#CEB172" stroke-width="12" stroke-linecap="round"/>
+      <path d="M418 720C451 714 482 712 512 712" stroke="#CEB172" stroke-width="12" stroke-linecap="round"/>
+      <path d="M606 640C573 634 542 632 512 632" stroke="#B98D3D" stroke-width="12" stroke-linecap="round"/>
+      <path d="M606 680C573 674 542 672 512 672" stroke="#B98D3D" stroke-width="12" stroke-linecap="round"/>
+      <path d="M606 720C573 714 542 712 512 712" stroke="#B98D3D" stroke-width="12" stroke-linecap="round"/>
+
+      <path d="M480 584H544V695L512 731L480 695V584Z" fill="#B02E3A"/>
+      <path d="M480 584H544V613H480V584Z" fill="#D34756"/>
+    </g>
+
+    <rect x="112" y="112" width="800" height="800" rx="180" stroke="#FFF3C9" stroke-opacity="0.18" stroke-width="12"/>
+  </g>
+</svg>

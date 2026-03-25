@@ -95,22 +95,21 @@ Map<int, Map<int, TajweedAyahData>> parseTajweedSourceJson(String jsonString) {
   return {
     for (final rawChapter in rawChapters)
       (rawChapter['surahIndex'] as int): {
-        for (final rawAyah in (rawChapter['ayahs'] as List<Object?>? ?? const [])
-            .cast<Map<Object?, Object?>>())
+        for (final rawAyah
+            in (rawChapter['ayahs'] as List<Object?>? ?? const [])
+                .cast<Map<Object?, Object?>>())
           (rawAyah['ayahNumber'] as int): _normalizeTajweedAyahData(
-              TajweedAyahData.fromJson(
-                rawAyah.map((key, value) => MapEntry(key as String, value)),
-              ),
+            TajweedAyahData.fromJson(
+              rawAyah.map((key, value) => MapEntry(key as String, value)),
             ),
+          ),
       },
   };
 }
 
 TajweedAyahData _normalizeTajweedAyahData(TajweedAyahData ayah) {
-  return TajweedAyahData(
-    ayahNumber: ayah.ayahNumber,
-    plainText: _normalizeTajweedText(ayah.plainText),
-    runs: ayah.runs
+  final normalizedRuns = _normalizeTajweedRuns(
+    ayah.runs
         .map(
           (run) => run.copyWith(
             text: _normalizeTajweedText(run.text),
@@ -118,10 +117,115 @@ TajweedAyahData _normalizeTajweedAyahData(TajweedAyahData ayah) {
         )
         .toList(growable: false),
   );
+  return TajweedAyahData(
+    ayahNumber: ayah.ayahNumber,
+    plainText: _normalizeTajweedText(ayah.plainText),
+    runs: normalizedRuns,
+  );
 }
 
 String _normalizeTajweedText(String text) {
   // Quran.com emits U+0672 in many words such as "ذَٰلِكَ" and "الصَّلَوٰةَ".
   // Our bundled Arabic font renders U+0670 correctly but not U+0672.
   return text.replaceAll('\u0672', '\u0670');
+}
+
+List<TajweedRun> _normalizeTajweedRuns(List<TajweedRun> runs) {
+  final clusters = <TajweedRun>[];
+
+  for (final run in runs) {
+    for (final cluster in splitArabicTextClusters(run.text)) {
+      if (cluster.isEmpty) {
+        continue;
+      }
+
+      if (startsWithArabicMarkOrAnnotation(cluster) && clusters.isNotEmpty) {
+        final previous = clusters.removeLast();
+        final attachedBucket = switch (run.bucket) {
+          final bucket?
+              when previous.bucket == null || previous.bucket == bucket =>
+            bucket,
+          _ => previous.bucket,
+        };
+        clusters.add(
+          previous.copyWith(
+            text: previous.text + cluster,
+            bucket: attachedBucket,
+          ),
+        );
+        continue;
+      }
+
+      clusters.add(
+        TajweedRun(
+          text: cluster,
+          bucket: run.bucket,
+        ),
+      );
+    }
+  }
+
+  final derivedRuns = clusters
+      .map(
+        (run) => run.bucket == null && _isGhunnahSourceCluster(run.text)
+            ? run.copyWith(
+                bucket: TajweedLegendBucket.idghamWithGhunnah,
+              )
+            : run,
+      )
+      .toList(growable: false);
+
+  return _mergeTajweedRuns(derivedRuns);
+}
+
+List<TajweedRun> _mergeTajweedRuns(List<TajweedRun> runs) {
+  if (runs.isEmpty) {
+    return const [];
+  }
+
+  final merged = <TajweedRun>[];
+  for (final run in runs) {
+    if (run.text.isEmpty) {
+      continue;
+    }
+    if (merged.isNotEmpty && merged.last.bucket == run.bucket) {
+      final previous = merged.removeLast();
+      merged.add(
+        previous.copyWith(
+          text: previous.text + run.text,
+        ),
+      );
+      continue;
+    }
+    merged.add(run);
+  }
+  return merged;
+}
+
+bool _isGhunnahSourceCluster(String cluster) {
+  final baseLetter = _firstArabicBaseLetter(cluster);
+  if (baseLetter != 'ن' && baseLetter != 'م') {
+    return false;
+  }
+  return cluster.contains('\u0651');
+}
+
+String? _firstArabicBaseLetter(String text) {
+  for (final rune in text.runes) {
+    if (isArabicMarkOrAnnotationRune(rune)) {
+      continue;
+    }
+
+    final char = String.fromCharCode(rune);
+    if (_isArabicLetter(char)) {
+      return char;
+    }
+    return null;
+  }
+  return null;
+}
+
+bool _isArabicLetter(String value) {
+  final rune = value.runes.first;
+  return rune >= 0x0621 && rune <= 0x064A;
 }
