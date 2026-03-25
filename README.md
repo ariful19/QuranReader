@@ -4,6 +4,10 @@ QuranReader is a native Flutter Android app for reading the Quran, tracking read
 
 It was built as a native replacement for the earlier `QuranTracker` WebView app. The app renders the bundled Quran text directly in Flutter, preserves Quran annotation signs with the bundled MeQuran font, lets you save progress by ayah range, and keeps your reading settings, progress, and saved AI insight responses locally on the device.
 
+## Download
+
+- Latest Android release APK: [app-release.apk](https://github.com/ariful19/QuranReader/releases/latest/download/app-release.apk)
+
 ## Features
 
 - Native Flutter reader for the bundled Quran text
@@ -65,3 +69,11 @@ After the app opens, use the home screen Settings button to save a Gemini API ke
 flutter analyze
 flutter test
 ```
+
+## GitHub CI/CD
+
+GitHub Actions now:
+
+- runs `flutter analyze` and `flutter test` on pull requests and pushes to `main`
+- builds `app-release.apk` on manual workflow runs and version tags like `v1.0.0`
+- publishes tagged APKs to GitHub Releases, which keeps the latest download link above up to date

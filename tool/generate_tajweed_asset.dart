@@ -197,7 +197,7 @@ List<Map<String, Object?>> _normalizeMappedRuns(
                 (previousBucket == null || previousBucket == bucket)
             ? bucket
             : previousBucket;
-        previous['text'] = '${previous['text']}${cluster}';
+        previous['text'] = '${previous['text']}$cluster';
         previous['bucket'] = attachedBucket;
         normalized.add(previous);
         continue;
