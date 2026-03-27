@@ -417,6 +417,7 @@ class PersistedState {
     required this.goalState,
     required this.readerSettings,
     required this.lastSavedRangeBookmark,
+    required this.lastReadAyahBySurah,
   });
 
   final SurahOrderMode orderMode;
@@ -424,6 +425,7 @@ class PersistedState {
   final GoalState? goalState;
   final ReaderSettings readerSettings;
   final LastSavedRangeBookmark? lastSavedRangeBookmark;
+  final Map<int, int> lastReadAyahBySurah;
 
   Map<String, Object?> toJson() {
     return {
@@ -434,12 +436,18 @@ class PersistedState {
       'goalState': goalState?.toJson(),
       'readerSettings': readerSettings.toJson(),
       'lastSavedRangeBookmark': lastSavedRangeBookmark?.toJson(),
+      'lastReadAyahBySurah': lastReadAyahBySurah.map(
+        (key, value) => MapEntry('$key', value),
+      ),
     };
   }
 
   factory PersistedState.fromJson(Map<String, Object?> json) {
     final rawProgress = (json['progressBySurah'] as Map<String, Object?>?) ??
         const <String, Object?>{};
+    final rawLastReadAyahBySurah =
+        (json['lastReadAyahBySurah'] as Map<String, Object?>?) ??
+            const <String, Object?>{};
     return PersistedState(
       orderMode: SurahOrderModeStorage.fromStorage(
         json['orderMode'] as String?,
@@ -470,6 +478,9 @@ class PersistedState {
           ),
         _ => null,
       },
+      lastReadAyahBySurah: rawLastReadAyahBySurah.map(
+        (key, value) => MapEntry(int.parse(key), value as int),
+      ),
     );
   }
 }

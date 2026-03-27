@@ -91,6 +91,7 @@ void main() {
       state.readerSettings.tajweedEnabled,
       ReaderSettings.defaultTajweedEnabled,
     );
+    expect(state.lastReadAyahBySurah, isEmpty);
   });
 
   test('reader settings round-trip tajweed preference', () {
@@ -118,6 +119,7 @@ void main() {
         fromAyah: 5,
         toAyah: 7,
       ),
+      lastReadAyahBySurah: {2: 6},
     );
 
     final restored = PersistedState.fromJson(state.toJson());
@@ -126,5 +128,6 @@ void main() {
     expect(restored.lastSavedRangeBookmark!.surahIndex, 2);
     expect(restored.lastSavedRangeBookmark!.fromAyah, 5);
     expect(restored.lastSavedRangeBookmark!.toAyah, 7);
+    expect(restored.lastReadAyahBySurah, {2: 6});
   });
 }

@@ -38,6 +38,7 @@ class QuranAppController extends ChangeNotifier {
   GoalState? _goalState;
   ReaderSettings _readerSettings = ReaderSettings.defaults;
   LastSavedRangeBookmark? _lastSavedRangeBookmark;
+  Map<int, int> _lastReadAyahBySurah = const {};
   bool _hasGeminiApiKey = false;
 
   static Future<QuranAppController> create() async {
@@ -62,6 +63,8 @@ class QuranAppController extends ChangeNotifier {
   ReaderSettings get readerSettings => _readerSettings;
 
   LastSavedRangeBookmark? get lastSavedRangeBookmark => _lastSavedRangeBookmark;
+
+  int? lastReadAyahFor(int surahIndex) => _lastReadAyahBySurah[surahIndex];
 
   TajweedAyahData? tajweedFor(int surahIndex, int ayahNumber) {
     return _tajweedBySurah[surahIndex]?[ayahNumber];
@@ -161,6 +164,7 @@ class QuranAppController extends ChangeNotifier {
       _goalState = persistedState.goalState;
       _readerSettings = persistedState.readerSettings;
       _lastSavedRangeBookmark = persistedState.lastSavedRangeBookmark;
+      _lastReadAyahBySurah = persistedState.lastReadAyahBySurah;
       _progressBySurah = {
         for (final surah in _catalog)
           surah.index: persistedState.progressBySurah[surah.index] ??
@@ -352,10 +356,30 @@ class QuranAppController extends ChangeNotifier {
     await _persistAndNotify();
   }
 
+  Future<void> saveLastReadAyah({
+    required int surahIndex,
+    required int ayahNumber,
+  }) async {
+    final surah = trySurahByIndex(surahIndex);
+    if (surah == null || ayahNumber < 1 || ayahNumber > surah.ayahCount) {
+      return;
+    }
+    if (_lastReadAyahBySurah[surahIndex] == ayahNumber) {
+      return;
+    }
+
+    _lastReadAyahBySurah = {
+      ..._lastReadAyahBySurah,
+      surahIndex: ayahNumber,
+    };
+    await _persist();
+  }
+
   Future<void> resetAllProgress() async {
     _orderMode = SurahOrderMode.normal;
     _goalState = null;
     _lastSavedRangeBookmark = null;
+    _lastReadAyahBySurah = const {};
     _progressBySurah = {
       for (final surah in _catalog) surah.index: SurahProgress.empty,
     };
@@ -442,16 +466,21 @@ class QuranAppController extends ChangeNotifier {
     return InsightLoadResult(data: generated, isFromCache: false);
   }
 
-  Future<void> _persistAndNotify() async {
-    await _appStateStore.save(
+  Future<void> _persist() {
+    return _appStateStore.save(
       PersistedState(
         orderMode: _orderMode,
         progressBySurah: _progressBySurah,
         goalState: _goalState,
         readerSettings: _readerSettings,
         lastSavedRangeBookmark: _lastSavedRangeBookmark,
+        lastReadAyahBySurah: _lastReadAyahBySurah,
       ),
     );
+  }
+
+  Future<void> _persistAndNotify() async {
+    await _persist();
     notifyListeners();
   }
 

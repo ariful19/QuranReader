@@ -29,6 +29,21 @@ void main() {
     expect(controller.lastSavedRangeBookmark, isNull);
   });
 
+  test('resetAllProgress clears remembered last-read ayahs', () async {
+    final controller = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await controller.saveLastReadAyah(surahIndex: 1, ayahNumber: 7);
+    expect(controller.lastReadAyahFor(1), 7);
+
+    await controller.resetAllProgress();
+
+    expect(controller.lastReadAyahFor(1), isNull);
+  });
+
   testWidgets('opens reader and saves a tapped ayah range', (tester) async {
     final controller = QuranAppController(
       catalogSource: _FakeCatalogSource(),
@@ -244,8 +259,13 @@ void main() {
     expect(scrollViewRestored.controller!.offset, greaterThan(0));
   });
 
-  testWidgets('reader swipe left to right opens the next surah',
+  testWidgets('reader swipe shorter than half the screen does not navigate',
       (tester) async {
+    tester.view.physicalSize = const Size(400, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final controller = QuranAppController(
       catalogSource: _FakeCatalogSource(),
       appStateStore: _MemoryStateStore(),
@@ -263,10 +283,43 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.fling(
+    await tester.drag(
       find.byKey(const Key('reader-swipe-area')),
-      const Offset(400, 0),
-      1500,
+      const Offset(180, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('ayah-1-1')), findsOneWidget);
+    expect(find.text('The Opening'), findsOneWidget);
+  });
+
+  testWidgets('reader swipe left to right opens the next surah',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: SurahReaderPage(
+          controller: controller,
+          surahIndex: 1,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const Key('reader-swipe-area')),
+      const Offset(220, 0),
     );
     await tester.pumpAndSettle();
 
@@ -276,6 +329,11 @@ void main() {
 
   testWidgets('reader swipe right to left opens the previous surah',
       (tester) async {
+    tester.view.physicalSize = const Size(400, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final controller = QuranAppController(
       catalogSource: _FakeCatalogSource(),
       appStateStore: _MemoryStateStore(),
@@ -293,15 +351,55 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.fling(
+    await tester.drag(
       find.byKey(const Key('reader-swipe-area')),
-      const Offset(-400, 0),
-      1500,
+      const Offset(-220, 0),
     );
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('ayah-1-1')), findsOneWidget);
     expect(find.text('The Opening'), findsOneWidget);
+  });
+
+  testWidgets('swiping in fullscreen keeps the next surah fullscreen',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: SurahReaderPage(
+          controller: controller,
+          surahIndex: 1,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('reader-fullscreen-button')));
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const Key('reader-swipe-area')),
+      const Offset(220, 0),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('ayah-2-1')), findsOneWidget);
+    expect(find.byKey(const Key('reader-progress-card')), findsNothing);
+    expect(
+      find.byKey(const Key('reader-exit-fullscreen-button')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('home jump dialog resumes the globally bookmarked saved range',
@@ -378,6 +476,104 @@ void main() {
     );
     expect(scrollView.controller!.offset, greaterThan(0));
     expect(find.byKey(const Key('ayah-2-10')), findsOneWidget);
+  });
+
+  testWidgets('home surah tiles resume the remembered ayah after reopening',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final store = _MemoryStateStore();
+    final firstController = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: store,
+    );
+    await firstController.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: QuranHomePage(controller: firstController),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('surah-tile-1')));
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const Key('reader-scroll-view')),
+      const Offset(0, -650),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.pumpAndSettle();
+
+    expect(firstController.lastReadAyahFor(1), greaterThan(1));
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    final secondController = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: store,
+    );
+    await secondController.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: QuranHomePage(controller: secondController),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('surah-tile-1')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    final scrollView = tester.widget<SingleChildScrollView>(
+      find.byKey(const Key('reader-scroll-view')),
+    );
+    expect(scrollView.controller!.offset, greaterThan(0));
+  });
+
+  testWidgets('explicit initial ayah overrides remembered resume state',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+    await controller.saveLastReadAyah(surahIndex: 2, ayahNumber: 2);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: SurahReaderPage(
+          controller: controller,
+          surahIndex: 2,
+          initialAyahNumber: 10,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    final scrollView = tester.widget<SingleChildScrollView>(
+      find.byKey(const Key('reader-scroll-view')),
+    );
+    expect(scrollView.controller!.offset, greaterThan(0));
+    expect(controller.lastReadAyahFor(2), greaterThan(5));
   });
 
   testWidgets('manual jump validates ayah numbers against the selected surah',

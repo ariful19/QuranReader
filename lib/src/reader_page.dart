@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -13,25 +15,33 @@ class SurahReaderPage extends StatefulWidget {
     required this.controller,
     required this.surahIndex,
     this.initialAyahNumber,
+    this.startFullscreen = false,
   });
 
   final QuranAppController controller;
   final int surahIndex;
   final int? initialAyahNumber;
+  final bool startFullscreen;
 
   @override
   State<SurahReaderPage> createState() => _SurahReaderPageState();
 }
 
 class _SurahReaderPageState extends State<SurahReaderPage> {
-  bool _isFullscreen = false;
+  late bool _isFullscreen;
   final ScrollController _readerScrollController = ScrollController();
   final Map<int, GlobalKey> _ayahAnchorKeys = <int, GlobalKey>{};
+  Timer? _rememberLastReadDebounce;
   double _pendingReaderOffset = 0;
+  double _swipeAreaWidth = 0;
+  double? _horizontalDragStartX;
+  double? _horizontalDragCurrentX;
   bool _hasAppliedInitialAyahJump = false;
   int _initialAyahJumpAttempts = 0;
 
   QuranAppController get controller => widget.controller;
+  int? get _resolvedInitialAyahNumber =>
+      widget.initialAyahNumber ?? controller.lastReadAyahFor(widget.surahIndex);
 
   GlobalKey _anchorKeyForAyah(int ayahNumber) {
     return _ayahAnchorKeys.putIfAbsent(ayahNumber, GlobalKey.new);
@@ -40,6 +50,16 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
   @override
   void initState() {
     super.initState();
+    _isFullscreen = widget.startFullscreen;
+    _readerScrollController.addListener(_handleReaderScroll);
+    if (_isFullscreen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        unawaited(_applySystemUiMode());
+      });
+    }
     _scheduleInitialAyahJumpIfNeeded();
   }
 
@@ -68,7 +88,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
   }
 
   void _scheduleInitialAyahJumpIfNeeded() {
-    final initialAyahNumber = widget.initialAyahNumber;
+    final initialAyahNumber = _resolvedInitialAyahNumber;
     if (initialAyahNumber == null ||
         initialAyahNumber < 1 ||
         _hasAppliedInitialAyahJump) {
@@ -97,10 +117,80 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
 
   @override
   void dispose() {
+    _rememberLastReadDebounce?.cancel();
+    _readerScrollController.removeListener(_handleReaderScroll);
+    if (_readerScrollController.hasClients) {
+      unawaited(_rememberCurrentAyahIfNeeded());
+    }
     _readerScrollController.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle.dark);
     super.dispose();
+  }
+
+  void _handleReaderScroll() {
+    _rememberLastReadDebounce?.cancel();
+    _rememberLastReadDebounce = Timer(const Duration(milliseconds: 180), () {
+      if (!mounted) {
+        return;
+      }
+      unawaited(_rememberCurrentAyahIfNeeded());
+    });
+  }
+
+  int? _topVisibleAyahNumber() {
+    if (!_readerScrollController.hasClients) {
+      return null;
+    }
+
+    final currentOffset = _readerScrollController.offset;
+    final surah = controller.surahByIndex(widget.surahIndex);
+    int? fallbackAyahNumber;
+    int? topVisibleAyahNumber;
+
+    for (final ayah in surah.ayahs) {
+      final ayahContext = _ayahAnchorKeys[ayah.number]?.currentContext;
+      if (ayahContext == null) {
+        continue;
+      }
+
+      final renderObject = ayahContext.findRenderObject();
+      if (renderObject == null || !renderObject.attached) {
+        continue;
+      }
+
+      fallbackAyahNumber ??= ayah.number;
+      final viewport = RenderAbstractViewport.of(renderObject);
+      final offsetToReveal =
+          viewport.getOffsetToReveal(renderObject, 0).offset;
+      if (offsetToReveal <= currentOffset + 1) {
+        topVisibleAyahNumber = ayah.number;
+      }
+    }
+
+    return topVisibleAyahNumber ?? fallbackAyahNumber;
+  }
+
+  Future<void> _rememberCurrentAyahIfNeeded() async {
+    final ayahNumber = _topVisibleAyahNumber();
+    if (ayahNumber == null) {
+      return;
+    }
+
+    await controller.saveLastReadAyah(
+      surahIndex: widget.surahIndex,
+      ayahNumber: ayahNumber,
+    );
+  }
+
+  Future<void> _applySystemUiMode() async {
+    final palette = _paletteFor(controller.readerSettings.backgroundKey);
+    await SystemChrome.setEnabledSystemUIMode(
+      _isFullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+    );
+    SystemChrome.setSystemUIOverlayStyle(
+      palette.isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+    );
   }
 
   Future<void> _setFullscreen(bool value) async {
@@ -128,19 +218,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
       _readerScrollController.jumpTo(targetOffset);
     });
 
-    final palette = _paletteFor(controller.readerSettings.backgroundKey);
-    if (value) {
-      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-      SystemChrome.setSystemUIOverlayStyle(
-        palette.isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
-      );
-      return;
-    }
-
-    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-    SystemChrome.setSystemUIOverlayStyle(
-      palette.isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
-    );
+    await _applySystemUiMode();
   }
 
   Future<void> _showReaderSettingsDialog() async {
@@ -279,24 +357,52 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
       return;
     }
 
+    _rememberLastReadDebounce?.cancel();
+    await _rememberCurrentAyahIfNeeded();
+    if (!mounted) {
+      return;
+    }
     await Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
         builder: (_) => SurahReaderPage(
           controller: controller,
           surahIndex: targetSurah.index,
+          initialAyahNumber: controller.lastReadAyahFor(targetSurah.index),
+          startFullscreen: _isFullscreen,
         ),
       ),
     );
   }
 
+  void _handleHorizontalDragStart(DragStartDetails details) {
+    _horizontalDragStartX = details.localPosition.dx;
+    _horizontalDragCurrentX = details.localPosition.dx;
+  }
+
+  void _handleHorizontalDragUpdate(DragUpdateDetails details) {
+    _horizontalDragCurrentX = details.localPosition.dx;
+  }
+
+  void _resetHorizontalDrag() {
+    _horizontalDragStartX = null;
+    _horizontalDragCurrentX = null;
+  }
+
   Future<void> _handleHorizontalDragEnd(DragEndDetails details) async {
-    final velocity =
-        details.primaryVelocity ?? details.velocity.pixelsPerSecond.dx;
-    if (velocity.abs() < 250) {
+    final dragStartX = _horizontalDragStartX;
+    final dragEndX = _horizontalDragCurrentX;
+    _resetHorizontalDrag();
+
+    if (dragStartX == null || dragEndX == null || _swipeAreaWidth <= 0) {
       return;
     }
 
-    if (velocity > 0) {
+    final deltaX = dragEndX - dragStartX;
+    if (deltaX.abs() < _swipeAreaWidth / 2) {
+      return;
+    }
+
+    if (deltaX > 0) {
       await _navigateToAdjacentSurah(1);
       return;
     }
@@ -319,6 +425,9 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
           canPop: !_isFullscreen,
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop || !_isFullscreen) {
+              if (didPop) {
+                unawaited(_rememberCurrentAyahIfNeeded());
+              }
               return;
             }
             await _setFullscreen(false);
@@ -361,51 +470,59 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                       ),
                     ],
                   ),
-            body: GestureDetector(
-              key: const Key('reader-swipe-area'),
-              behavior: HitTestBehavior.translucent,
-              onHorizontalDragEnd: _handleHorizontalDragEnd,
-              child: Stack(
-                children: [
-                  SafeArea(
-                    top: !_isFullscreen,
-                    bottom: false,
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        _isFullscreen ? 8 : 20,
-                        _isFullscreen ? 8 : 8,
-                        _isFullscreen ? 8 : 20,
-                        _isFullscreen ? 8 : 20,
-                      ),
-                      child: _ReaderLayout(
-                        surah: surah,
-                        controller: controller,
-                        percent: percent,
-                        savedRanges: savedRanges,
-                        onRangeTap: (range) => _scrollToAyah(range.toAyah),
-                        palette: palette,
-                        fontSize: settings.fontSize,
-                        isFullscreen: _isFullscreen,
-                        scrollController: _readerScrollController,
-                        ayahAnchorKeyFor: _anchorKeyForAyah,
-                      ),
-                    ),
-                  ),
-                  if (_isFullscreen)
-                    SafeArea(
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                        child: _FullscreenToolbar(
-                          surah: surah,
-                          palette: palette,
-                          onBack: () => Navigator.of(context).maybePop(),
-                          onSettings: _showReaderSettingsDialog,
-                          onExitFullscreen: () => _setFullscreen(false),
+            body: LayoutBuilder(
+              builder: (context, constraints) {
+                _swipeAreaWidth = constraints.maxWidth;
+                return GestureDetector(
+                  key: const Key('reader-swipe-area'),
+                  behavior: HitTestBehavior.translucent,
+                  onHorizontalDragStart: _handleHorizontalDragStart,
+                  onHorizontalDragUpdate: _handleHorizontalDragUpdate,
+                  onHorizontalDragCancel: _resetHorizontalDrag,
+                  onHorizontalDragEnd: _handleHorizontalDragEnd,
+                  child: Stack(
+                    children: [
+                      SafeArea(
+                        top: !_isFullscreen,
+                        bottom: false,
+                        child: Padding(
+                          padding: EdgeInsets.fromLTRB(
+                            _isFullscreen ? 8 : 20,
+                            _isFullscreen ? 8 : 8,
+                            _isFullscreen ? 8 : 20,
+                            _isFullscreen ? 8 : 20,
+                          ),
+                          child: _ReaderLayout(
+                            surah: surah,
+                            controller: controller,
+                            percent: percent,
+                            savedRanges: savedRanges,
+                            onRangeTap: (range) => _scrollToAyah(range.toAyah),
+                            palette: palette,
+                            fontSize: settings.fontSize,
+                            isFullscreen: _isFullscreen,
+                            scrollController: _readerScrollController,
+                            ayahAnchorKeyFor: _anchorKeyForAyah,
+                          ),
                         ),
                       ),
-                    ),
-                ],
-              ),
+                      if (_isFullscreen)
+                        SafeArea(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                            child: _FullscreenToolbar(
+                              surah: surah,
+                              palette: palette,
+                              onBack: () => Navigator.of(context).maybePop(),
+                              onSettings: _showReaderSettingsDialog,
+                              onExitFullscreen: () => _setFullscreen(false),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              },
             ),
           ),
         );
