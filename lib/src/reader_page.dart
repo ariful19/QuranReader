@@ -519,6 +519,21 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                             ),
                           ),
                         ),
+                      if (_isFullscreen)
+                        Positioned(
+                          left: 12,
+                          right: 12,
+                          bottom: 8,
+                          child: SafeArea(
+                            top: false,
+                            left: false,
+                            right: false,
+                            child: _FullscreenScrollProgress(
+                              scrollController: _readerScrollController,
+                              palette: palette,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 );
@@ -1062,6 +1077,55 @@ class _FullscreenToolbar extends StatelessWidget {
               tooltip: 'Exit full screen',
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FullscreenScrollProgress extends StatelessWidget {
+  const _FullscreenScrollProgress({
+    required this.scrollController,
+    required this.palette,
+  });
+
+  final ScrollController scrollController;
+  final _ReaderPalette palette;
+
+  double _progressValue() {
+    final position = scrollController.positions
+        .where((candidate) => candidate.hasContentDimensions)
+        .lastOrNull;
+    if (position == null) {
+      return 0;
+    }
+
+    final maxScrollExtent = position.maxScrollExtent;
+    if (maxScrollExtent <= 0) {
+      return 0;
+    }
+
+    return (position.pixels / maxScrollExtent).clamp(0.0, 1.0);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(999),
+        child: AnimatedBuilder(
+          animation: scrollController,
+          builder: (context, _) {
+            return LinearProgressIndicator(
+              key: const Key('reader-fullscreen-scroll-progress'),
+              value: _progressValue(),
+              minHeight: 2,
+              backgroundColor: palette.borderColor.withOpacity(0.55),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                palette.markerFillColor,
+              ),
+            );
+          },
         ),
       ),
     );

@@ -140,11 +140,30 @@ void main() {
       find.byKey(const Key('reader-exit-fullscreen-button')),
       findsOneWidget,
     );
+    final fullscreenProgressBefore = tester.widget<LinearProgressIndicator>(
+      find.byKey(const Key('reader-fullscreen-scroll-progress')),
+    );
+    expect(fullscreenProgressBefore.value, 0);
+
+    await tester.drag(
+      find.byKey(const Key('reader-scroll-view')),
+      const Offset(0, -250),
+    );
+    await tester.pumpAndSettle();
+
+    final fullscreenProgressAfter = tester.widget<LinearProgressIndicator>(
+      find.byKey(const Key('reader-fullscreen-scroll-progress')),
+    );
+    expect(fullscreenProgressAfter.value ?? 0, greaterThan(0));
 
     await tester.tap(find.byKey(const Key('reader-exit-fullscreen-button')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('reader-progress-card')), findsOneWidget);
+    expect(
+      find.byKey(const Key('reader-fullscreen-scroll-progress')),
+      findsNothing,
+    );
   });
 
   testWidgets('saving a later custom range and closing dialog does not assert',
