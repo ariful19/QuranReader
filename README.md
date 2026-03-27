@@ -77,3 +77,39 @@ GitHub Actions now:
 - runs `flutter analyze` and `flutter test` on pull requests and pushes to `main`
 - builds `app-release.apk` on manual workflow runs and version tags like `v1.0.0`
 - publishes tagged APKs to GitHub Releases, which keeps the latest download link above up to date
+
+## Android Release Signing
+
+Release APKs must be signed with the same keystore locally and in CI. If you let Gradle fall back to machine-specific debug keys, a release built on GitHub Actions will not install over a local build that uses a different certificate.
+
+1. Create an upload keystore, for example:
+
+```bash
+keytool -genkeypair -v -keystore android/upload-keystore.jks -alias upload -keyalg RSA -keysize 2048 -validity 10000
+```
+
+2. Copy `android/key.properties.example` to `android/key.properties` and fill in the real values:
+
+```properties
+storeFile=upload-keystore.jks
+storePassword=your-keystore-password
+keyAlias=upload
+keyPassword=your-key-password
+```
+
+3. Add the same values as GitHub repository secrets so CI signs with the exact same certificate:
+
+- `ANDROID_KEYSTORE_BASE64`: base64-encoded contents of `android/upload-keystore.jks`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
+Example to produce the base64 value:
+
+```bash
+base64 android/upload-keystore.jks
+```
+
+If you already installed the app on a device from a locally built APK, keep using that same keystore in CI. Otherwise Android will reject the CI APK as an update because the signatures do not match. If you switch to a new keystore, uninstall the old app once before installing the newly signed release.
+
+After that, both local `flutter build apk --release` and the GitHub Actions release workflow will produce installable APKs signed with the same key.
