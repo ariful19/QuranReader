@@ -758,7 +758,11 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
         );
     final presentation = _buildPresentation(context);
 
-    return GestureDetector(
+    final bismillah = surah.ayahs.isNotEmpty
+        ? surah.ayahs.first.bismillah
+        : null;
+
+    final richText = GestureDetector(
       behavior: HitTestBehavior.translucent,
       onTapUp: (details) {
         final target =
@@ -800,6 +804,36 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
         ),
       ),
     );
+
+    if (bismillah == null || bismillah.isEmpty) {
+      return richText;
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: RichText(
+            text: TextSpan(
+              style: baseStyle,
+              children: [
+                for (final run in splitQuranTextRuns(bismillah))
+                  TextSpan(
+                    text: run.text,
+                    style: TextStyle(
+                      fontFamily: run.isAnnotation ? 'MeQuran' : null,
+                    ),
+                  ),
+              ],
+            ),
+            textAlign: TextAlign.center,
+            textDirection: TextDirection.rtl,
+          ),
+        ),
+        richText,
+      ],
+    );
   }
 
   _AyahTextPresentation _buildPresentation(BuildContext context) {
@@ -811,7 +845,7 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
       final tajweedData = _tajweedEnabled
           ? controller.tajweedFor(surah.index, ayah.number)
           : null;
-      final ayahText = tajweedData?.plainText ?? ayah.renderedText;
+      final ayahText = tajweedData?.plainText ?? ayah.text;
       final displayRuns = normalizeTajweedRunsForDisplay(
         tajweedData?.runs ?? [TajweedRun(text: ayahText)],
       );
