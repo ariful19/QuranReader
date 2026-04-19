@@ -27,16 +27,6 @@ class SurahSeed {
 }
 
 @immutable
-class QuranTextRun {
-  const QuranTextRun({
-    required this.text,
-    required this.isAnnotation,
-  });
-
-  final String text;
-  final bool isAnnotation;
-}
-
 enum TajweedLegendBucket {
   ikhfa,
   idghamWithGhunnah,
@@ -154,8 +144,6 @@ class AyahData {
     }
     return '${bismillah!} $text';
   }
-
-  List<QuranTextRun> get displayRuns => splitQuranTextRuns(renderedText);
 
   int get unicodeChars => renderedText.runes.length;
 }
@@ -611,37 +599,4 @@ List<TajweedRun> normalizeTajweedRunsForDisplay(List<TajweedRun> runs) {
   }
 
   return normalized;
-}
-
-List<QuranTextRun> splitQuranTextRuns(String text) {
-  final runs = <QuranTextRun>[];
-  final buffer = StringBuffer();
-  bool? currentIsAnnotation;
-
-  void flush() {
-    if (buffer.isEmpty || currentIsAnnotation == null) {
-      return;
-    }
-    runs.add(
-      QuranTextRun(
-        text: buffer.toString(),
-        isAnnotation: currentIsAnnotation,
-      ),
-    );
-    buffer.clear();
-  }
-
-  for (final rune in text.runes) {
-    final isAnnotation = isQuranAnnotationRune(rune);
-    if (currentIsAnnotation == null) {
-      currentIsAnnotation = isAnnotation;
-    } else if (currentIsAnnotation != isAnnotation) {
-      flush();
-      currentIsAnnotation = isAnnotation;
-    }
-    buffer.writeCharCode(rune);
-  }
-
-  flush();
-  return runs;
 }

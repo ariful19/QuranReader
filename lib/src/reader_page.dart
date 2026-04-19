@@ -448,7 +448,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                           textDirection: TextDirection.rtl,
                           style:
                               Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontFamily: 'UthmanicHafs',
+                                    fontFamily: 'KFGQPC',
                                     fontSize: 24,
                                     color: palette.toolbarColor,
                                   ),
@@ -751,7 +751,7 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
   @override
   Widget build(BuildContext context) {
     final baseStyle = Theme.of(context).textTheme.headlineSmall?.copyWith(
-          fontFamily: 'UthmanicHafs',
+          fontFamily: 'KFGQPC',
           fontSize: fontSize,
           height: 1.85,
           color: palette.textColor,
@@ -904,15 +904,13 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
       style: TextStyle(backgroundColor: savedColor),
       children: [
         for (final run in runs)
-          for (final splitRun in splitQuranTextRuns(run.text))
-            TextSpan(
-              text: splitRun.text,
-              style: TextStyle(
-                fontFamily: splitRun.isAnnotation ? 'MeQuran' : null,
-                color: _colorForTajweedBucket(run.bucket),
-                backgroundColor: savedColor,
-              ),
+          TextSpan(
+            text: run.text,
+            style: TextStyle(
+              color: _colorForTajweedBucket(run.bucket),
+              backgroundColor: savedColor,
             ),
+          ),
       ],
     );
   }
@@ -1055,7 +1053,7 @@ class _FullscreenToolbar extends StatelessWidget {
                     textDirection: TextDirection.rtl,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: palette.toolbarColor,
-                          fontFamily: 'UthmanicHafs',
+                          fontFamily: 'KFGQPC',
                           fontSize: 20,
                         ),
                   ),

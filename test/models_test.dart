@@ -18,18 +18,6 @@ void main() {
     expect(merged.first.toAyah, 9);
   });
 
-  test('splitQuranTextRuns isolates Quran-specific annotation signs', () {
-    const source = 'وَدُّوا۟ لَوْ تُدْهِنُ فَيُدْهِنُونَ ۞ عُتُلٍّۭ';
-    final runs = splitQuranTextRuns(source);
-
-    expect(runs.map((run) => run.text).join(), source);
-    expect(runs.where((run) => run.isAnnotation).map((run) => run.text), [
-      '۟',
-      '۞',
-      'ۭ',
-    ]);
-  });
-
   test(
       'normalizeTajweedRunsForDisplay moves the base letter with leading marks',
       () {
