@@ -18,21 +18,20 @@ void main() {
     expect(merged.first.toAyah, 9);
   });
 
-  test(
-      'normalizeTajweedRunsForDisplay moves the base letter with leading marks',
+  test('normalizeTajweedRunsForDisplay only merges adjacent matching buckets',
       () {
     final normalized = normalizeTajweedRunsForDisplay([
-      const TajweedRun(text: '\u0644'),
-      const TajweedRun(
-        text: '\u0651\u0650\u0644\u0652\u0645\u064f',
-        bucket: TajweedLegendBucket.idghamWithGhunnah,
-      ),
+      const TajweedRun(text: 'ab'),
+      const TajweedRun(text: 'cd'),
+      const TajweedRun(text: 'ef', bucket: TajweedLegendBucket.idghamWithGhunnah),
+      const TajweedRun(text: 'gh', bucket: TajweedLegendBucket.idghamWithGhunnah),
     ]);
 
-    expect(normalized, hasLength(1));
-    expect(normalized.single.bucket, TajweedLegendBucket.idghamWithGhunnah);
-    expect(
-        normalized.single.text, '\u0644\u0651\u0650\u0644\u0652\u0645\u064f');
+    expect(normalized, hasLength(2));
+    expect(normalized.first.text, 'abcd');
+    expect(normalized.first.bucket, isNull);
+    expect(normalized.last.text, 'efgh');
+    expect(normalized.last.bucket, TajweedLegendBucket.idghamWithGhunnah);
   });
 
   test('suggestedRangeForTappedAyah follows the nearest unfinished gap', () {

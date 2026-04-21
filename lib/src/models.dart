@@ -511,60 +511,12 @@ String formatPercent(double value) {
   return '${value.toStringAsFixed(2)}%';
 }
 
-bool isQuranAnnotationRune(int rune) {
-  return rune >= 0x06D6 && rune <= 0x06ED;
-}
-
-bool isArabicMarkOrAnnotationRune(int rune) {
-  return (rune >= 0x064B && rune <= 0x065F) ||
-      rune == 0x0670 ||
-      isQuranAnnotationRune(rune);
-}
-
-bool startsWithArabicMarkOrAnnotation(String text) {
-  if (text.isEmpty) {
-    return false;
-  }
-  return isArabicMarkOrAnnotationRune(text.runes.first);
-}
-
-List<String> splitArabicTextClusters(String text) {
-  final clusters = <String>[];
-  final buffer = StringBuffer();
-
-  void flush() {
-    if (buffer.isEmpty) {
-      return;
-    }
-    clusters.add(buffer.toString());
-    buffer.clear();
-  }
-
-  for (final rune in text.runes) {
-    if (buffer.isEmpty) {
-      buffer.writeCharCode(rune);
-      continue;
-    }
-
-    if (isArabicMarkOrAnnotationRune(rune)) {
-      buffer.writeCharCode(rune);
-      continue;
-    }
-
-    flush();
-    buffer.writeCharCode(rune);
-  }
-
-  flush();
-  return clusters;
-}
-
 List<TajweedRun> normalizeTajweedRunsForDisplay(List<TajweedRun> runs) {
   final normalized = <TajweedRun>[];
 
-  void appendRun(TajweedRun run) {
+  for (final run in runs) {
     if (run.text.isEmpty) {
-      return;
+      continue;
     }
     if (normalized.isNotEmpty && normalized.last.bucket == run.bucket) {
       final previous = normalized.removeLast();
@@ -573,29 +525,9 @@ List<TajweedRun> normalizeTajweedRunsForDisplay(List<TajweedRun> runs) {
           text: previous.text + run.text,
         ),
       );
-      return;
+      continue;
     }
     normalized.add(run);
-  }
-
-  for (final run in runs) {
-    var current = run;
-    if (startsWithArabicMarkOrAnnotation(current.text) &&
-        normalized.isNotEmpty) {
-      final previous = normalized.removeLast();
-      final previousClusters = splitArabicTextClusters(previous.text);
-      if (previousClusters.isNotEmpty) {
-        final movedCluster = previousClusters.removeLast();
-        final remainingPrevious = previousClusters.join();
-        if (remainingPrevious.isNotEmpty) {
-          normalized.add(previous.copyWith(text: remainingPrevious));
-        }
-        current = current.copyWith(text: movedCluster + current.text);
-      } else {
-        normalized.add(previous);
-      }
-    }
-    appendRun(current);
   }
 
   return normalized;

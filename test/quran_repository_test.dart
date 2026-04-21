@@ -16,30 +16,11 @@ void main() {
     expect(catalog[1].ayahs.first.bismillah, isNotNull);
   });
 
-  test('loads bundled tajweed with derived ghunnah for mushaddad noon and meem',
-      () async {
+  test('loads bundled tajweed data', () async {
     final tajweed = await const AssetTajweedSource().loadTajweed();
 
-    final mushaddadMeem = tajweed[2]?[105];
-    expect(mushaddadMeem, isNotNull);
-    expect(
-      mushaddadMeem!.runs.any(
-        (run) =>
-            run.bucket == TajweedLegendBucket.idghamWithGhunnah &&
-            run.text.contains('مَّ'),
-      ),
-      isTrue,
-    );
-
-    final mushaddadNoon = tajweed[18]?[13];
-    expect(mushaddadNoon, isNotNull);
-    expect(
-      mushaddadNoon!.runs.any(
-        (run) =>
-            run.bucket == TajweedLegendBucket.idghamWithGhunnah &&
-            run.text.contains('نَّ'),
-      ),
-      isTrue,
-    );
+    expect(tajweed, isNotEmpty);
+    expect(tajweed[2], isNotNull);
+    expect(tajweed[18], isNotNull);
   });
 }

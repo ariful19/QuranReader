@@ -35,7 +35,7 @@ void main() {
     expect(ayah.runs.last.bucket, isNull);
   });
 
-  test('parseTajweedSourceJson normalizes upstream alef codepoint for display',
+  test('parseTajweedSourceJson preserves source codepoints exactly',
       () {
     const json = '''
 {
@@ -61,12 +61,12 @@ void main() {
     final ayah = parsed[2]?[2];
 
     expect(ayah, isNotNull);
-    expect(ayah!.plainText, 'ذَٰلِكَ ٱلصَّلَوٰةَ');
-    expect(ayah.runs.first.text, 'ذَٰلِكَ');
-    expect(ayah.runs.last.text, ' ٱلصَّلَوٰةَ');
+    expect(ayah!.plainText, 'ذَٲلِكَ ٱلصَّلَوٲةَ');
+    expect(ayah.runs.first.text, 'ذَٲلِكَ');
+    expect(ayah.runs.last.text, ' ٱلصَّلَوٲةَ');
   });
 
-  test('parseTajweedSourceJson derives ghunnah for mushaddad noon and meem',
+  test('parseTajweedSourceJson keeps source buckets untouched',
       () {
     const json = '''
 {
@@ -91,31 +91,12 @@ void main() {
     final ayah = parsed[1]?[2];
 
     expect(ayah, isNotNull);
-    expect(
-      ayah!.runs
-          .where((run) => run.bucket == TajweedLegendBucket.idghamWithGhunnah),
-      isNotEmpty,
-    );
-    expect(
-      ayah.runs.any(
-        (run) =>
-            run.bucket == TajweedLegendBucket.idghamWithGhunnah &&
-            run.text.contains('مَّ'),
-      ),
-      isTrue,
-    );
-    expect(
-      ayah.runs.any(
-        (run) =>
-            run.bucket == TajweedLegendBucket.idghamWithGhunnah &&
-            run.text.contains('نَّ'),
-      ),
-      isTrue,
-    );
+    expect(ayah!.runs, hasLength(1));
+    expect(ayah.runs.single.bucket, isNull);
+    expect(ayah.runs.single.text, 'مَّا نَّحْنُ');
   });
 
-  test(
-      'parseTajweedSourceJson keeps leading marks with the prior colored cluster',
+  test('parseTajweedSourceJson preserves run boundaries around leading marks',
       () {
     const json = '''
 {
@@ -144,20 +125,22 @@ void main() {
 
     expect(ayah, isNotNull);
     expect(
-      ayah!.runs.any(
-        (run) =>
-            run.bucket == TajweedLegendBucket.idghamWithGhunnah &&
-            run.text.contains('مِّ'),
-      ),
-      isTrue,
+      ayah!.runs,
+      hasLength(4),
     );
+    expect(ayah.runs[0].text, 'هُدًى م');
     expect(
-      ayah.runs.any(
-        (run) =>
-            run.bucket == TajweedLegendBucket.idghamWithoutGhunnah &&
-            run.text.contains('رَّ'),
-      ),
-      isTrue,
+      ayah.runs[0].bucket,
+      TajweedLegendBucket.idghamWithGhunnah,
     );
+    expect(ayah.runs[1].text, 'ّ');
+    expect(ayah.runs[1].bucket, isNull);
+    expect(ayah.runs[2].text, 'ِن ر');
+    expect(
+      ayah.runs[2].bucket,
+      TajweedLegendBucket.idghamWithoutGhunnah,
+    );
+    expect(ayah.runs[3].text, 'َّبِّهِمْ');
+    expect(ayah.runs[3].bucket, isNull);
   });
 }

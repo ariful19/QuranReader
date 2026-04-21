@@ -812,9 +812,7 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
           ? controller.tajweedFor(surah.index, ayah.number)
           : null;
       final ayahText = tajweedData?.plainText ?? ayah.renderedText;
-      final displayRuns = normalizeTajweedRunsForDisplay(
-        tajweedData?.runs ?? [TajweedRun(text: ayahText)],
-      );
+      final displayRuns = tajweedData?.runs ?? [TajweedRun(text: ayahText)];
       final savedColor = controller.isAyahSaved(surah, ayah.number)
           ? palette.savedAyahColor
           : Colors.transparent;
