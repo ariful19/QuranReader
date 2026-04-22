@@ -9,6 +9,8 @@ import 'ai_models.dart';
 import 'app_controller.dart';
 import 'models.dart';
 
+const String _surahBasmalaText = 'بِسۡمِ ٱللَّهِ ٱلرَّحۡمَـٰنِ ٱلرَّحِيمِ';
+
 class SurahReaderPage extends StatefulWidget {
   const SurahReaderPage({
     super.key,
@@ -161,8 +163,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
 
       fallbackAyahNumber ??= ayah.number;
       final viewport = RenderAbstractViewport.of(renderObject);
-      final offsetToReveal =
-          viewport.getOffsetToReveal(renderObject, 0).offset;
+      final offsetToReveal = viewport.getOffsetToReveal(renderObject, 0).offset;
       if (offsetToReveal <= currentOffset + 1) {
         topVisibleAyahNumber = ayah.number;
       }
@@ -448,7 +449,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                           textDirection: TextDirection.rtl,
                           style:
                               Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontFamily: 'KFGQPC',
+                                    fontFamily: 'UthmanicHafs',
                                     fontSize: 24,
                                     color: palette.toolbarColor,
                                   ),
@@ -691,12 +692,32 @@ class _ReaderCanvas extends StatelessWidget {
             isFullscreen ? 20 : 20,
             isFullscreen ? 28 : 28,
           ),
-          child: _ContinuousAyahText(
-            surah: surah,
-            controller: controller,
-            palette: palette,
-            fontSize: fontSize,
-            ayahAnchorKeyFor: ayahAnchorKeyFor,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (surah.index != 1 && surah.index != 9) ...[
+                Text(
+                  _surahBasmalaText,
+                  key: const Key('reader-basmala-header'),
+                  textAlign: TextAlign.center,
+                  textDirection: TextDirection.rtl,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontFamily: 'UthmanicHafs',
+                        fontSize: fontSize + 1,
+                        height: 1.7,
+                        color: palette.textColor,
+                      ),
+                ),
+                const SizedBox(height: 20),
+              ],
+              _ContinuousAyahText(
+                surah: surah,
+                controller: controller,
+                palette: palette,
+                fontSize: fontSize,
+                ayahAnchorKeyFor: ayahAnchorKeyFor,
+              ),
+            ],
           ),
         ),
       ),
@@ -751,7 +772,7 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
   @override
   Widget build(BuildContext context) {
     final baseStyle = Theme.of(context).textTheme.headlineSmall?.copyWith(
-          fontFamily: 'KFGQPC',
+          fontFamily: 'UthmanicHafs',
           fontSize: fontSize,
           height: 1.85,
           color: palette.textColor,
@@ -1051,7 +1072,7 @@ class _FullscreenToolbar extends StatelessWidget {
                     textDirection: TextDirection.rtl,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: palette.toolbarColor,
-                          fontFamily: 'KFGQPC',
+                          fontFamily: 'UthmanicHafs',
                           fontSize: 20,
                         ),
                   ),

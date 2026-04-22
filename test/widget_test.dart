@@ -8,6 +8,8 @@ import 'package:quran_reader/src/progress_repository.dart';
 import 'package:quran_reader/src/quran_repository.dart';
 import 'package:quran_reader/src/reader_page.dart';
 
+const _expectedBasmalaText = 'بِسۡمِ ٱللَّهِ ٱلرَّحۡمَـٰنِ ٱلرَّحِيمِ';
+
 void main() {
   test('removing the bookmarked merged range clears the last saved bookmark',
       () async {
@@ -112,10 +114,6 @@ void main() {
 
     await tester.tap(find.byKey(const Key('reader-background-midnight')));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('reader-tajweed-switch')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('reader-tajweed-switch')));
-    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('save-reader-settings-button')));
     await tester.pumpAndSettle();
 
@@ -164,6 +162,85 @@ void main() {
       find.byKey(const Key('reader-fullscreen-scroll-progress')),
       findsNothing,
     );
+  });
+
+  testWidgets('reader shows a basmala header for surahs other than 1 and 9',
+      (tester) async {
+    final controller = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: SurahReaderPage(
+          controller: controller,
+          surahIndex: 2,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('reader-basmala-header')), findsOneWidget);
+    expect(find.text(_expectedBasmalaText), findsOneWidget);
+  });
+
+  testWidgets('reader omits the basmala header for surahs 1 and 9',
+      (tester) async {
+    final controller = QuranAppController(
+      catalogSource: const _StaticCatalogSource([
+        SurahData(
+          index: 1,
+          arabicName: 'الفاتحة',
+          englishName: 'The Opening',
+          chronologicalOrder: 5,
+          totalUnicodeChars: 24,
+          ayahs: [
+            AyahData(number: 1, text: 'بِسۡمِ ٱللَّهِ'),
+            AyahData(number: 2, text: 'ٱلۡحَمۡدُ لِلَّهِ'),
+          ],
+        ),
+        SurahData(
+          index: 9,
+          arabicName: 'التوبة',
+          englishName: 'The Repentance',
+          chronologicalOrder: 113,
+          totalUnicodeChars: 24,
+          ayahs: [
+            AyahData(number: 1, text: 'بَرَآءَةٞ مِّنَ ٱللَّهِ'),
+            AyahData(number: 2, text: 'فَسِيحُواْ فِي ٱلۡأَرۡضِ'),
+          ],
+        ),
+      ]),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: SurahReaderPage(
+          controller: controller,
+          surahIndex: 1,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('reader-basmala-header')), findsNothing);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: SurahReaderPage(
+          controller: controller,
+          surahIndex: 9,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('reader-basmala-header')), findsNothing);
   });
 
   testWidgets('saving a later custom range and closing dialog does not assert',
@@ -660,6 +737,15 @@ class _FakeCatalogSource implements CatalogSource {
       ),
     ];
   }
+}
+
+class _StaticCatalogSource implements CatalogSource {
+  const _StaticCatalogSource(this.catalog);
+
+  final List<SurahData> catalog;
+
+  @override
+  Future<List<SurahData>> loadCatalog() async => catalog;
 }
 
 class _MemoryStateStore implements AppStateStore {

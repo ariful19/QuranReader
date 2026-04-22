@@ -15,6 +15,7 @@ dependencies:
   path: ^1.9.0
   shared_preferences: ^2.3.2
   sqflite: ^2.4.1
+  sqflite_common_ffi: ^2.3.4+4
   url_launcher: ^6.3.1
   xml: ^6.5.0
 
@@ -26,9 +27,8 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - Resources/quran-uthmani.xml
-    - Resources/quran-tajweed.json
+    - Resources/qpc-hafs-tajweed.db
   fonts:
-    - family: KFGQPC
+    - family: UthmanicHafs
       fonts:
-        - asset: Resources/KFGQPC Uthman Taha Naskh Regular.ttf
+        - asset: Resources/UthmanicHafs1Ver18.ttf

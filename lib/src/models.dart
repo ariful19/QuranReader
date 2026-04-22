@@ -349,7 +349,7 @@ class ReaderSettings {
   static const minFontSize = 26.0;
   static const maxFontSize = 44.0;
   static const defaultBackgroundKey = 'paper';
-  static const defaultTajweedEnabled = false;
+  static const defaultTajweedEnabled = true;
   static const defaults = ReaderSettings(
     fontSize: defaultFontSize,
     backgroundKey: defaultBackgroundKey,
@@ -509,26 +509,4 @@ DateTime parseYmd(String value) {
 
 String formatPercent(double value) {
   return '${value.toStringAsFixed(2)}%';
-}
-
-List<TajweedRun> normalizeTajweedRunsForDisplay(List<TajweedRun> runs) {
-  final normalized = <TajweedRun>[];
-
-  for (final run in runs) {
-    if (run.text.isEmpty) {
-      continue;
-    }
-    if (normalized.isNotEmpty && normalized.last.bucket == run.bucket) {
-      final previous = normalized.removeLast();
-      normalized.add(
-        previous.copyWith(
-          text: previous.text + run.text,
-        ),
-      );
-      continue;
-    }
-    normalized.add(run);
-  }
-
-  return normalized;
 }

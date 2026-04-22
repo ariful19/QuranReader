@@ -721,7 +721,7 @@ class _SurahTile extends StatelessWidget {
             surah.arabicName,
             textDirection: TextDirection.rtl,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontFamily: 'KFGQPC',
+                  fontFamily: 'UthmanicHafs',
                   fontSize: 26,
                 ),
           ),

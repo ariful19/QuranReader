@@ -18,22 +18,6 @@ void main() {
     expect(merged.first.toAyah, 9);
   });
 
-  test('normalizeTajweedRunsForDisplay only merges adjacent matching buckets',
-      () {
-    final normalized = normalizeTajweedRunsForDisplay([
-      const TajweedRun(text: 'ab'),
-      const TajweedRun(text: 'cd'),
-      const TajweedRun(text: 'ef', bucket: TajweedLegendBucket.idghamWithGhunnah),
-      const TajweedRun(text: 'gh', bucket: TajweedLegendBucket.idghamWithGhunnah),
-    ]);
-
-    expect(normalized, hasLength(2));
-    expect(normalized.first.text, 'abcd');
-    expect(normalized.first.bucket, isNull);
-    expect(normalized.last.text, 'efgh');
-    expect(normalized.last.bucket, TajweedLegendBucket.idghamWithGhunnah);
-  });
-
   test('suggestedRangeForTappedAyah follows the nearest unfinished gap', () {
     final firstSuggestion = suggestedRangeForTappedAyah(
       savedRanges: const [],
