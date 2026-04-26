@@ -17,24 +17,22 @@ class SurahReaderPage extends StatefulWidget {
     required this.controller,
     required this.surahIndex,
     this.initialAyahNumber,
-    this.startFullscreen = false,
   });
 
   final QuranAppController controller;
   final int surahIndex;
   final int? initialAyahNumber;
-  final bool startFullscreen;
 
   @override
   State<SurahReaderPage> createState() => _SurahReaderPageState();
 }
 
 class _SurahReaderPageState extends State<SurahReaderPage> {
-  late bool _isFullscreen;
   final ScrollController _readerScrollController = ScrollController();
+  final GlobalKey<_ContinuousAyahTextState> _continuousAyahTextKey =
+      GlobalKey<_ContinuousAyahTextState>();
   final Map<int, GlobalKey> _ayahAnchorKeys = <int, GlobalKey>{};
   Timer? _rememberLastReadDebounce;
-  double _pendingReaderOffset = 0;
   double _swipeAreaWidth = 0;
   double? _horizontalDragStartX;
   double? _horizontalDragCurrentX;
@@ -52,16 +50,13 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
   @override
   void initState() {
     super.initState();
-    _isFullscreen = widget.startFullscreen;
     _readerScrollController.addListener(_handleReaderScroll);
-    if (_isFullscreen) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          return;
-        }
-        unawaited(_applySystemUiMode());
-      });
-    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      unawaited(_applySystemUiMode());
+    });
     _scheduleInitialAyahJumpIfNeeded();
   }
 
@@ -114,6 +109,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
 
       _hasAppliedInitialAyahJump = true;
       await _scrollToAyah(initialAyahNumber);
+      await _rememberCurrentAyahIfNeeded();
     });
   }
 
@@ -187,39 +183,11 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
   Future<void> _applySystemUiMode() async {
     final palette = _paletteFor(controller.readerSettings.backgroundKey);
     await SystemChrome.setEnabledSystemUIMode(
-      _isFullscreen ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+      SystemUiMode.immersiveSticky,
     );
     SystemChrome.setSystemUIOverlayStyle(
       palette.isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
     );
-  }
-
-  Future<void> _setFullscreen(bool value) async {
-    if (_isFullscreen == value) {
-      return;
-    }
-
-    if (_readerScrollController.hasClients) {
-      _pendingReaderOffset = _readerScrollController.offset;
-    }
-
-    setState(() {
-      _isFullscreen = value;
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_readerScrollController.hasClients) {
-        return;
-      }
-      final position = _readerScrollController.position;
-      final targetOffset = _pendingReaderOffset.clamp(
-        position.minScrollExtent,
-        position.maxScrollExtent,
-      );
-      _readerScrollController.jumpTo(targetOffset);
-    });
-
-    await _applySystemUiMode();
   }
 
   Future<void> _showReaderSettingsDialog() async {
@@ -351,6 +319,82 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
     );
   }
 
+  Future<void> _showProgressDialog({
+    required double percent,
+    required List<AyahRange> savedRanges,
+    required _ReaderPalette palette,
+  }) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Reading progress'),
+          content: SizedBox(
+            width: 440,
+            child: SingleChildScrollView(
+              child: _ReaderProgressCard(
+                percent: percent,
+                savedRanges: savedRanges,
+                palette: palette,
+                onRangeTap: (range) async {
+                  Navigator.of(dialogContext).pop();
+                  await _scrollToAyah(range.toAyah);
+                },
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              key: const Key('close-reader-progress-dialog-button'),
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  double _estimatedReaderLineHeight(double fontSize) {
+    return fontSize * 1.85;
+  }
+
+  Future<void> _scrollReaderByPage({
+    required bool forward,
+    required double fallbackLineHeight,
+  }) async {
+    if (!_readerScrollController.hasClients) {
+      return;
+    }
+
+    final position = _readerScrollController.position;
+    final lineHeight = _continuousAyahTextKey.currentState?.visibleLineHeight(
+          scrollController: _readerScrollController,
+          fromTop: !forward,
+        ) ??
+        fallbackLineHeight;
+    final overlap =
+        lineHeight.clamp(0.0, position.viewportDimension - 1).toDouble();
+    final delta = position.viewportDimension - overlap;
+    if (delta <= 0) {
+      return;
+    }
+
+    final targetOffset = (position.pixels + (forward ? delta : -delta))
+        .clamp(position.minScrollExtent, position.maxScrollExtent)
+        .toDouble();
+    if ((targetOffset - position.pixels).abs() < 1) {
+      return;
+    }
+
+    HapticFeedback.selectionClick();
+    await _readerScrollController.animateTo(
+      targetOffset,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+    );
+  }
+
   Future<void> _navigateToAdjacentSurah(int surahOffset) async {
     final targetSurah =
         controller.trySurahByIndex(widget.surahIndex + surahOffset);
@@ -369,7 +413,6 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
           controller: controller,
           surahIndex: targetSurah.index,
           initialAyahNumber: controller.lastReadAyahFor(targetSurah.index),
-          startFullscreen: _isFullscreen,
         ),
       ),
     );
@@ -423,57 +466,25 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
         final savedRanges = controller.rangesFor(surah.index);
 
         return PopScope(
-          canPop: !_isFullscreen,
+          canPop: true,
           onPopInvokedWithResult: (didPop, _) async {
-            if (didPop || !_isFullscreen) {
-              if (didPop) {
-                unawaited(_rememberCurrentAyahIfNeeded());
-              }
-              return;
+            if (didPop) {
+              unawaited(_rememberCurrentAyahIfNeeded());
             }
-            await _setFullscreen(false);
           },
           child: Scaffold(
             backgroundColor: palette.scaffoldColor,
-            appBar: _isFullscreen
-                ? null
-                : AppBar(
-                    backgroundColor: palette.scaffoldColor,
-                    foregroundColor: palette.toolbarColor,
-                    title: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(surah.englishName),
-                        Text(
-                          surah.arabicName,
-                          textDirection: TextDirection.rtl,
-                          style:
-                              Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontFamily: 'UthmanicHafs',
-                                    fontSize: 24,
-                                    color: palette.toolbarColor,
-                                  ),
-                        ),
-                      ],
-                    ),
-                    actions: [
-                      IconButton(
-                        key: const Key('reader-settings-button'),
-                        onPressed: _showReaderSettingsDialog,
-                        icon: const Icon(Icons.tune_rounded),
-                        tooltip: 'Reader settings',
-                      ),
-                      IconButton(
-                        key: const Key('reader-fullscreen-button'),
-                        onPressed: () => _setFullscreen(true),
-                        icon: const Icon(Icons.fullscreen_rounded),
-                        tooltip: 'Full screen',
-                      ),
-                    ],
-                  ),
             body: LayoutBuilder(
               builder: (context, constraints) {
                 _swipeAreaWidth = constraints.maxWidth;
+                final tapZoneWidth = (constraints.maxWidth * 0.44)
+                    .clamp(136.0, 220.0)
+                    .toDouble();
+                final tapZoneHeight = (constraints.maxHeight * 0.23)
+                    .clamp(136.0, 220.0)
+                    .toDouble();
+                final fallbackLineHeight =
+                    _estimatedReaderLineHeight(settings.fontSize);
                 return GestureDetector(
                   key: const Key('reader-swipe-area'),
                   behavior: HitTestBehavior.translucent,
@@ -484,57 +495,86 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                   child: Stack(
                     children: [
                       SafeArea(
-                        top: !_isFullscreen,
+                        top: false,
                         bottom: false,
                         child: Padding(
-                          padding: EdgeInsets.fromLTRB(
-                            _isFullscreen ? 8 : 20,
-                            _isFullscreen ? 8 : 8,
-                            _isFullscreen ? 8 : 20,
-                            _isFullscreen ? 8 : 20,
-                          ),
-                          child: _ReaderLayout(
+                          padding: const EdgeInsets.fromLTRB(8, 8, 8, 20),
+                          child: _ReaderCanvas(
                             surah: surah,
                             controller: controller,
-                            percent: percent,
-                            savedRanges: savedRanges,
-                            onRangeTap: (range) => _scrollToAyah(range.toAyah),
                             palette: palette,
                             fontSize: settings.fontSize,
-                            isFullscreen: _isFullscreen,
                             scrollController: _readerScrollController,
                             ayahAnchorKeyFor: _anchorKeyForAyah,
+                            continuousAyahTextKey: _continuousAyahTextKey,
                           ),
                         ),
                       ),
-                      if (_isFullscreen)
-                        SafeArea(
+                      SafeArea(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                          child: _FullscreenToolbar(
+                            surah: surah,
+                            palette: palette,
+                            onBack: () => Navigator.of(context).maybePop(),
+                            onShowProgress: () => _showProgressDialog(
+                              percent: percent,
+                              savedRanges: savedRanges,
+                              palette: palette,
+                            ),
+                            onSettings: _showReaderSettingsDialog,
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 12,
+                        right: 12,
+                        bottom: 8,
+                        child: SafeArea(
+                          top: false,
+                          left: false,
+                          right: false,
+                          child: _FullscreenScrollProgress(
+                            scrollController: _readerScrollController,
+                            palette: palette,
+                          ),
+                        ),
+                      ),
+                      SafeArea(
+                        child: Align(
+                          alignment: Alignment.topRight,
                           child: Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                            child: _FullscreenToolbar(
-                              surah: surah,
-                              palette: palette,
-                              onBack: () => Navigator.of(context).maybePop(),
-                              onSettings: _showReaderSettingsDialog,
-                              onExitFullscreen: () => _setFullscreen(false),
+                            padding: const EdgeInsets.only(top: 96),
+                            child: _ReaderPageTapZone(
+                              key: const Key('reader-page-up-zone'),
+                              width: tapZoneWidth,
+                              height: tapZoneHeight,
+                              onTap: () => _scrollReaderByPage(
+                                forward: false,
+                                fallbackLineHeight: fallbackLineHeight,
+                              ),
                             ),
                           ),
                         ),
-                      if (_isFullscreen)
-                        Positioned(
-                          left: 12,
-                          right: 12,
-                          bottom: 8,
-                          child: SafeArea(
-                            top: false,
-                            left: false,
-                            right: false,
-                            child: _FullscreenScrollProgress(
-                              scrollController: _readerScrollController,
-                              palette: palette,
+                      ),
+                      SafeArea(
+                        top: false,
+                        child: Align(
+                          alignment: Alignment.bottomRight,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 28),
+                            child: _ReaderPageTapZone(
+                              key: const Key('reader-page-down-zone'),
+                              width: tapZoneWidth,
+                              height: tapZoneHeight,
+                              onTap: () => _scrollReaderByPage(
+                                forward: true,
+                                fallbackLineHeight: fallbackLineHeight,
+                              ),
                             ),
                           ),
                         ),
+                      ),
                     ],
                   ),
                 );
@@ -547,114 +587,74 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
   }
 }
 
-class _ReaderLayout extends StatelessWidget {
-  const _ReaderLayout({
-    required this.surah,
-    required this.controller,
+class _ReaderProgressCard extends StatelessWidget {
+  const _ReaderProgressCard({
     required this.percent,
     required this.savedRanges,
     required this.onRangeTap,
     required this.palette,
-    required this.fontSize,
-    required this.isFullscreen,
-    required this.scrollController,
-    required this.ayahAnchorKeyFor,
   });
 
-  final SurahData surah;
-  final QuranAppController controller;
   final double percent;
   final List<AyahRange> savedRanges;
   final ValueChanged<AyahRange> onRangeTap;
   final _ReaderPalette palette;
-  final double fontSize;
-  final bool isFullscreen;
-  final ScrollController scrollController;
-  final GlobalKey Function(int ayahNumber) ayahAnchorKeyFor;
 
   @override
   Widget build(BuildContext context) {
-    if (isFullscreen) {
-      return _ReaderCanvas(
-        surah: surah,
-        controller: controller,
-        palette: palette,
-        fontSize: fontSize,
-        isFullscreen: true,
-        scrollController: scrollController,
-        ayahAnchorKeyFor: ayahAnchorKeyFor,
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        DecoratedBox(
-          key: const Key('reader-progress-card'),
-          decoration: BoxDecoration(
-            color: palette.surfaceColor,
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: palette.borderColor),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Tap any ayah to save your progress.',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: palette.textColor,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Read progress: ${formatPercent(percent)}',
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: palette.secondaryTextColor,
-                      ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: savedRanges.isEmpty
-                      ? [
-                          const Chip(
-                            label: Text('No saved ranges yet'),
-                          ),
-                        ]
-                      : savedRanges
-                          .map<Widget>(
-                            (range) => ActionChip(
-                              key: Key(
-                                'range-chip-${range.fromAyah}-${range.toAyah}',
-                              ),
-                              label: Text(
-                                'Ayah ${range.fromAyah} to ${range.toAyah}',
-                              ),
-                              onPressed: () => onRangeTap(range),
-                            ),
-                          )
-                          .toList(growable: false),
-                ),
-              ],
+    return DecoratedBox(
+      key: const Key('reader-progress-card'),
+      decoration: BoxDecoration(
+        color: palette.surfaceColor,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: palette.borderColor),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Tap any ayah to save your progress.',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: palette.textColor,
+                  ),
             ),
-          ),
+            const SizedBox(height: 8),
+            Text(
+              'Read progress: ${formatPercent(percent)}',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: palette.secondaryTextColor,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: savedRanges.isEmpty
+                  ? [
+                      const Chip(
+                        label: Text('No saved ranges yet'),
+                      ),
+                    ]
+                  : savedRanges
+                      .map<Widget>(
+                        (range) => ActionChip(
+                          key: Key(
+                            'range-chip-${range.fromAyah}-${range.toAyah}',
+                          ),
+                          label: Text(
+                            'Ayah ${range.fromAyah} to ${range.toAyah}',
+                          ),
+                          onPressed: () => onRangeTap(range),
+                        ),
+                      )
+                      .toList(growable: false),
+            ),
+          ],
         ),
-        const SizedBox(height: 16),
-        Expanded(
-          child: _ReaderCanvas(
-            surah: surah,
-            controller: controller,
-            palette: palette,
-            fontSize: fontSize,
-            isFullscreen: false,
-            scrollController: scrollController,
-            ayahAnchorKeyFor: ayahAnchorKeyFor,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -665,33 +665,28 @@ class _ReaderCanvas extends StatelessWidget {
     required this.controller,
     required this.palette,
     required this.fontSize,
-    required this.isFullscreen,
     required this.scrollController,
     required this.ayahAnchorKeyFor,
+    required this.continuousAyahTextKey,
   });
 
   final SurahData surah;
   final QuranAppController controller;
   final _ReaderPalette palette;
   final double fontSize;
-  final bool isFullscreen;
   final ScrollController scrollController;
   final GlobalKey Function(int ayahNumber) ayahAnchorKeyFor;
+  final GlobalKey<_ContinuousAyahTextState> continuousAyahTextKey;
 
   @override
   Widget build(BuildContext context) {
-    final content = SingleChildScrollView(
+    return SingleChildScrollView(
       key: const Key('reader-scroll-view'),
       controller: scrollController,
       child: Directionality(
         textDirection: TextDirection.rtl,
         child: Padding(
-          padding: EdgeInsets.fromLTRB(
-            isFullscreen ? 20 : 20,
-            isFullscreen ? 76 : 24,
-            isFullscreen ? 20 : 20,
-            isFullscreen ? 28 : 28,
-          ),
+          padding: const EdgeInsets.fromLTRB(20, 76, 20, 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -711,6 +706,7 @@ class _ReaderCanvas extends StatelessWidget {
                 const SizedBox(height: 20),
               ],
               _ContinuousAyahText(
+                key: continuousAyahTextKey,
                 surah: surah,
                 controller: controller,
                 palette: palette,
@@ -722,24 +718,35 @@ class _ReaderCanvas extends StatelessWidget {
         ),
       ),
     );
+  }
+}
 
-    if (isFullscreen) {
-      return content;
-    }
+class _ReaderPageTapZone extends StatelessWidget {
+  const _ReaderPageTapZone({
+    super.key,
+    required this.width,
+    required this.height,
+    required this.onTap,
+  });
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: palette.surfaceColor,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: palette.borderColor),
-      ),
-      child: content,
+  final double width;
+  final double height;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      excludeFromSemantics: true,
+      onTap: onTap,
+      child: SizedBox(width: width, height: height),
     );
   }
 }
 
 class _ContinuousAyahText extends StatefulWidget {
   const _ContinuousAyahText({
+    super.key,
     required this.surah,
     required this.controller,
     required this.palette,
@@ -768,6 +775,69 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
       widget.ayahAnchorKeyFor;
 
   bool get _tajweedEnabled => controller.readerSettings.tajweedEnabled;
+
+  double? visibleLineHeight({
+    required ScrollController scrollController,
+    required bool fromTop,
+  }) {
+    if (!scrollController.hasClients) {
+      return null;
+    }
+
+    final renderObject = _richTextKey.currentContext?.findRenderObject();
+    if (renderObject is! RenderParagraph) {
+      return null;
+    }
+
+    final viewport = RenderAbstractViewport.of(renderObject);
+    final paragraphTopOffset =
+        viewport.getOffsetToReveal(renderObject, 0).offset;
+    final viewportY = fromTop
+        ? scrollController.offset - paragraphTopOffset + 12
+        : scrollController.offset +
+            scrollController.position.viewportDimension -
+            paragraphTopOffset -
+            12;
+    return _lineHeightNear(renderObject, viewportY);
+  }
+
+  double? _lineHeightNear(RenderParagraph renderObject, double localY) {
+    final plainText =
+        renderObject.text.toPlainText(includeSemanticsLabels: false);
+    if (plainText.isEmpty ||
+        renderObject.size.width <= 1 ||
+        renderObject.size.height <= 1) {
+      return null;
+    }
+
+    final clampedY =
+        localY.clamp(1.0, renderObject.size.height - 1.0).toDouble();
+    final sampleXs = <double>[
+      renderObject.size.width * 0.5,
+      renderObject.size.width * 0.75,
+      renderObject.size.width * 0.25,
+      renderObject.size.width - 1,
+      1,
+    ];
+
+    for (final sampleX in sampleXs) {
+      final clampedX =
+          sampleX.clamp(1.0, renderObject.size.width - 1.0).toDouble();
+      final position = renderObject.getPositionForOffset(
+        Offset(clampedX, clampedY),
+      );
+      final start = position.offset.clamp(0, plainText.length - 1).toInt();
+      final end = (start + 1).clamp(start + 1, plainText.length).toInt();
+      final boxes = renderObject.getBoxesForSelection(
+        TextSelection(baseOffset: start, extentOffset: end),
+      );
+      if (boxes.isNotEmpty) {
+        return boxes.first.toRect().height;
+      }
+    }
+
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1026,15 +1096,15 @@ class _FullscreenToolbar extends StatelessWidget {
     required this.surah,
     required this.palette,
     required this.onBack,
+    required this.onShowProgress,
     required this.onSettings,
-    required this.onExitFullscreen,
   });
 
   final SurahData surah;
   final _ReaderPalette palette;
   final VoidCallback onBack;
+  final VoidCallback onShowProgress;
   final VoidCallback onSettings;
-  final VoidCallback onExitFullscreen;
 
   @override
   Widget build(BuildContext context) {
@@ -1080,18 +1150,18 @@ class _FullscreenToolbar extends StatelessWidget {
               ),
             ),
             IconButton(
-              key: const Key('reader-settings-button-fullscreen'),
+              key: const Key('reader-progress-button'),
+              onPressed: onShowProgress,
+              icon: const Icon(Icons.bar_chart_rounded),
+              color: palette.toolbarColor,
+              tooltip: 'Reading progress',
+            ),
+            IconButton(
+              key: const Key('reader-settings-button'),
               onPressed: onSettings,
               icon: const Icon(Icons.tune_rounded),
               color: palette.toolbarColor,
               tooltip: 'Reader settings',
-            ),
-            IconButton(
-              key: const Key('reader-exit-fullscreen-button'),
-              onPressed: onExitFullscreen,
-              icon: const Icon(Icons.fullscreen_exit_rounded),
-              color: palette.toolbarColor,
-              tooltip: 'Exit full screen',
             ),
           ],
         ),

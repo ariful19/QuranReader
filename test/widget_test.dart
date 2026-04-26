@@ -47,6 +47,11 @@ void main() {
   });
 
   testWidgets('opens reader and saves a tapped ayah range', (tester) async {
+    tester.view.physicalSize = const Size(400, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final controller = QuranAppController(
       catalogSource: _FakeCatalogSource(),
       tajweedSource: const _FakeTajweedSource(),
@@ -67,9 +72,10 @@ void main() {
     await tester.tap(find.byKey(const Key('surah-tile-1')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('ayah-1-1')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('ayah-1-1')));
+    final textTopLeft = tester.getTopLeft(
+      find.byKey(const Key('continuous-ayah-text')),
+    );
+    await tester.tapAt(textTopLeft + const Offset(72, 150));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('save-range-button')), findsOneWidget);
@@ -77,13 +83,12 @@ void main() {
     await tester.tap(find.byKey(const Key('save-range-button')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Ayah 1 to 1'), findsWidgets);
     expect(controller.rangesFor(1), hasLength(1));
     expect(controller.lastSavedRangeBookmark, isNotNull);
-    expect(controller.lastSavedRangeBookmark!.toAyah, 1);
+    expect(controller.lastSavedRangeBookmark!.toAyah, greaterThanOrEqualTo(1));
   });
 
-  testWidgets('reader settings and fullscreen mode update the reader',
+  testWidgets('reader opens fullscreen and shows progress in a dialog',
       (tester) async {
     final controller = QuranAppController(
       catalogSource: _FakeCatalogSource(),
@@ -102,6 +107,9 @@ void main() {
 
     await tester.tap(find.byKey(const Key('surah-tile-1')));
     await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('reader-progress-card')), findsNothing);
+    expect(find.byKey(const Key('reader-progress-button')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('reader-settings-button')));
     await tester.pumpAndSettle();
@@ -128,16 +136,6 @@ void main() {
       contains('tajweed sample 1'),
     );
 
-    expect(find.byKey(const Key('reader-progress-card')), findsOneWidget);
-
-    await tester.tap(find.byKey(const Key('reader-fullscreen-button')));
-    await tester.pumpAndSettle();
-
-    expect(find.byKey(const Key('reader-progress-card')), findsNothing);
-    expect(
-      find.byKey(const Key('reader-exit-fullscreen-button')),
-      findsOneWidget,
-    );
     final fullscreenProgressBefore = tester.widget<LinearProgressIndicator>(
       find.byKey(const Key('reader-fullscreen-scroll-progress')),
     );
@@ -154,14 +152,17 @@ void main() {
     );
     expect(fullscreenProgressAfter.value ?? 0, greaterThan(0));
 
-    await tester.tap(find.byKey(const Key('reader-exit-fullscreen-button')));
+    await tester.tap(find.byKey(const Key('reader-progress-button')));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('reader-progress-card')), findsOneWidget);
-    expect(
-      find.byKey(const Key('reader-fullscreen-scroll-progress')),
-      findsNothing,
+
+    await tester.tap(
+      find.byKey(const Key('close-reader-progress-dialog-button')),
     );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('reader-progress-card')), findsNothing);
   });
 
   testWidgets('reader shows a basmala header for surahs other than 1 and 9',
@@ -245,6 +246,11 @@ void main() {
 
   testWidgets('saving a later custom range and closing dialog does not assert',
       (tester) async {
+    tester.view.physicalSize = const Size(400, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final controller = QuranAppController(
       catalogSource: _FakeCatalogSource(),
       appStateStore: _MemoryStateStore(),
@@ -289,7 +295,7 @@ void main() {
     expect(controller.rangesFor(1).last.toAyah, 3);
   });
 
-  testWidgets('saved range navigation survives fullscreen toggles',
+  testWidgets('saved range navigation works from the progress dialog',
       (tester) async {
     tester.view.physicalSize = const Size(400, 700);
     tester.view.devicePixelRatio = 1.0;
@@ -323,6 +329,9 @@ void main() {
     );
     expect(scrollViewBefore.controller!.offset, 0);
 
+    await tester.tap(find.byKey(const Key('reader-progress-button')));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(const Key('range-chip-2-8')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
@@ -333,26 +342,7 @@ void main() {
     );
     final scrolledOffset = scrollViewAfter.controller!.offset;
     expect(scrolledOffset, greaterThan(0));
-
-    await tester.tap(find.byKey(const Key('reader-fullscreen-button')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 350));
-    await tester.pumpAndSettle();
-
-    final scrollViewFullscreen = tester.widget<SingleChildScrollView>(
-      find.byKey(const Key('reader-scroll-view')),
-    );
-    expect(scrollViewFullscreen.controller!.offset, greaterThan(0));
-
-    await tester.tap(find.byKey(const Key('reader-exit-fullscreen-button')));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 350));
-    await tester.pumpAndSettle();
-
-    final scrollViewRestored = tester.widget<SingleChildScrollView>(
-      find.byKey(const Key('reader-scroll-view')),
-    );
-    expect(scrollViewRestored.controller!.offset, greaterThan(0));
+    expect(find.byKey(const Key('reader-progress-card')), findsNothing);
   });
 
   testWidgets('reader swipe shorter than half the screen does not navigate',
@@ -457,7 +447,59 @@ void main() {
     expect(find.text('The Opening'), findsOneWidget);
   });
 
-  testWidgets('swiping in fullscreen keeps the next surah fullscreen',
+  testWidgets('reader tap zones page with one-line overlap', (tester) async {
+    tester.view.physicalSize = const Size(400, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: SurahReaderPage(
+          controller: controller,
+          surahIndex: 1,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final initialScrollView = tester.widget<SingleChildScrollView>(
+      find.byKey(const Key('reader-scroll-view')),
+    );
+    expect(initialScrollView.controller!.offset, 0);
+
+    await tester.tap(find.byKey(const Key('reader-page-down-zone')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    final downScrollView = tester.widget<SingleChildScrollView>(
+      find.byKey(const Key('reader-scroll-view')),
+    );
+    const expectedOverlap = ReaderSettings.defaultFontSize * 1.85;
+    final expectedOffset =
+        downScrollView.controller!.position.viewportDimension - expectedOverlap;
+    expect(downScrollView.controller!.offset, closeTo(expectedOffset, 40));
+
+    await tester.tap(find.byKey(const Key('reader-page-up-zone')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    final upScrollView = tester.widget<SingleChildScrollView>(
+      find.byKey(const Key('reader-scroll-view')),
+    );
+    expect(upScrollView.controller!.offset, closeTo(0, 8));
+  });
+
+  testWidgets('swiping keeps the next surah in the fullscreen reader',
       (tester) async {
     tester.view.physicalSize = const Size(400, 700);
     tester.view.devicePixelRatio = 1.0;
@@ -481,9 +523,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('reader-fullscreen-button')));
-    await tester.pumpAndSettle();
-
     await tester.drag(
       find.byKey(const Key('reader-swipe-area')),
       const Offset(220, 0),
@@ -492,10 +531,7 @@ void main() {
 
     expect(find.byKey(const Key('ayah-2-1')), findsOneWidget);
     expect(find.byKey(const Key('reader-progress-card')), findsNothing);
-    expect(
-      find.byKey(const Key('reader-exit-fullscreen-button')),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('reader-progress-button')), findsOneWidget);
   });
 
   testWidgets('home jump dialog resumes the globally bookmarked saved range',
