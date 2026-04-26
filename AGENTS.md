@@ -11,6 +11,8 @@
 - If `flutter` is not on `PATH`, use:
   - `D:\repos\flutter\tooling\flutter\bin\flutter.bat`
 - This workspace's `android/local.properties` already points to the same Flutter and Android SDK locations.
+- Build the release APK with:
+  - `D:\repos\flutter\tooling\flutter\bin\flutter.bat build apk --release`
 
 ## Notes
 

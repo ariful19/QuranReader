@@ -447,7 +447,7 @@ void main() {
     expect(find.text('The Opening'), findsOneWidget);
   });
 
-  testWidgets('reader tap zones page with one-line overlap', (tester) async {
+  testWidgets('reader tap zones page with two-line overlap', (tester) async {
     tester.view.physicalSize = const Size(400, 700);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -483,7 +483,7 @@ void main() {
     final downScrollView = tester.widget<SingleChildScrollView>(
       find.byKey(const Key('reader-scroll-view')),
     );
-    const expectedOverlap = ReaderSettings.defaultFontSize * 1.85;
+    const expectedOverlap = ReaderSettings.defaultFontSize * 1.85 * 2;
     final expectedOffset =
         downScrollView.controller!.position.viewportDimension - expectedOverlap;
     expect(downScrollView.controller!.offset, closeTo(expectedOffset, 40));

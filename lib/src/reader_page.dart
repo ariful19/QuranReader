@@ -10,6 +10,7 @@ import 'app_controller.dart';
 import 'models.dart';
 
 const String _surahBasmalaText = 'بِسۡمِ ٱللَّهِ ٱلرَّحۡمَـٰنِ ٱلرَّحِيمِ';
+const double _readerPageScrollOverlapLineCount = 2;
 
 class SurahReaderPage extends StatefulWidget {
   const SurahReaderPage({
@@ -373,8 +374,12 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
           fromTop: !forward,
         ) ??
         fallbackLineHeight;
+    final effectiveLineHeight =
+        lineHeight < fallbackLineHeight ? fallbackLineHeight : lineHeight;
     final overlap =
-        lineHeight.clamp(0.0, position.viewportDimension - 1).toDouble();
+        (effectiveLineHeight * _readerPageScrollOverlapLineCount)
+            .clamp(0.0, position.viewportDimension - 1)
+            .toDouble();
     final delta = position.viewportDimension - overlap;
     if (delta <= 0) {
       return;
