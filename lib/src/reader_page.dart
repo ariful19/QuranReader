@@ -500,7 +500,8 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                   child: Stack(
                     children: [
                       SafeArea(
-                        top: false,
+                        left: false,
+                        right: false,
                         bottom: false,
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(8, 8, 8, 20),

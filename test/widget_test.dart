@@ -413,6 +413,53 @@ void main() {
     expect(find.text('The Cow'), findsOneWidget);
   });
 
+  testWidgets(
+      'reader swipe keeps the basmala below the toolbar without saved progress',
+      (tester) async {
+    tester.view.physicalSize = const Size(400, 700);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: MediaQuery(
+          data: const MediaQueryData(
+            padding: EdgeInsets.only(top: 32),
+            viewPadding: EdgeInsets.only(top: 32),
+          ),
+          child: SurahReaderPage(
+            controller: controller,
+            surahIndex: 1,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+      find.byKey(const Key('reader-swipe-area')),
+      const Offset(220, 0),
+    );
+    await tester.pumpAndSettle();
+
+    final basmalaRect = tester.getRect(
+      find.byKey(const Key('reader-basmala-header')),
+    );
+    final progressButtonRect = tester.getRect(
+      find.byKey(const Key('reader-progress-button')),
+    );
+
+    expect(basmalaRect.top, greaterThan(progressButtonRect.bottom));
+  });
+
   testWidgets('reader swipe right to left opens the previous surah',
       (tester) async {
     tester.view.physicalSize = const Size(400, 700);
