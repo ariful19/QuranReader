@@ -79,9 +79,24 @@ class QuranAppController extends ChangeNotifier {
         SurahOrderMode.normal => left.index.compareTo(right.index),
         SurahOrderMode.chronological =>
           left.chronologicalOrder.compareTo(right.chronologicalOrder),
+        SurahOrderMode.readPercentage => _compareByReadPercentage(left, right),
       };
     });
     return surahs;
+  }
+
+  int _compareByReadPercentage(SurahData left, SurahData right) {
+    int group(SurahData s) {
+      final p = percentForSurah(s);
+      if (p > 0 && p < 100) return 0; // partially read
+      if (p == 0) return 1;           // not read
+      return 2;                       // read ones
+    }
+    final gLeft = group(left);
+    final gRight = group(right);
+    if (gLeft != gRight) return gLeft.compareTo(gRight);
+    
+    return left.index.compareTo(right.index);
   }
 
   double get totalPercent {

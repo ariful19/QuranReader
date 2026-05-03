@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
-enum SurahOrderMode { normal, chronological }
+enum SurahOrderMode { normal, chronological, readPercentage }
 
 extension SurahOrderModeStorage on SurahOrderMode {
   String get storageValue => name;

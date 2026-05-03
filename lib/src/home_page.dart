@@ -61,23 +61,31 @@ class QuranHomePage extends StatelessWidget {
                   const SizedBox(height: 16),
                   Align(
                     alignment: Alignment.centerLeft,
-                    child: SegmentedButton<SurahOrderMode>(
-                      segments: const [
-                        ButtonSegment(
-                          value: SurahOrderMode.normal,
-                          label: Text('Normal'),
-                          icon: Icon(Icons.format_list_numbered_rounded),
-                        ),
-                        ButtonSegment(
-                          value: SurahOrderMode.chronological,
-                          label: Text('Chronological'),
-                          icon: Icon(Icons.history_toggle_off_rounded),
-                        ),
-                      ],
-                      selected: {controller.orderMode},
-                      onSelectionChanged: (selection) {
-                        controller.setOrderMode(selection.first);
-                      },
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: SegmentedButton<SurahOrderMode>(
+                        segments: const [
+                          ButtonSegment(
+                            value: SurahOrderMode.normal,
+                            label: Text('Normal'),
+                            icon: Icon(Icons.format_list_numbered_rounded),
+                          ),
+                          ButtonSegment(
+                            value: SurahOrderMode.chronological,
+                            label: Text('Chronological'),
+                            icon: Icon(Icons.history_toggle_off_rounded),
+                          ),
+                          ButtonSegment(
+                            value: SurahOrderMode.readPercentage,
+                            label: Text('Progress'),
+                            icon: Icon(Icons.incomplete_circle_rounded),
+                          ),
+                        ],
+                        selected: {controller.orderMode},
+                        onSelectionChanged: (selection) {
+                          controller.setOrderMode(selection.first);
+                        },
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -331,53 +339,66 @@ class _SummaryCard extends StatelessWidget {
             Color(0xFF155E75),
           ],
         ),
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
               'Track your Quran reading journey',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     color: Colors.white,
                   ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              formatPercent(controller.totalPercent),
-              style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  formatPercent(controller.totalPercent),
+                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                FilledButton.icon(
+                  key: const Key('jump-button'),
+                  onPressed: onJumpPressed,
+                  icon: const Icon(Icons.travel_explore_rounded, size: 16),
+                  label: const Text('Jump'),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
                   ),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
               'Total progress based on exact Unicode text lengths from the bundled Quran.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Colors.white.withOpacity(0.88),
                   ),
             ),
-            const SizedBox(height: 18),
-            FilledButton.icon(
-              key: const Key('jump-button'),
-              onPressed: onJumpPressed,
-              icon: const Icon(Icons.travel_explore_rounded),
-              label: const Text('Jump'),
-            ),
             if (goalMetrics != null) ...[
-              const SizedBox(height: 18),
+              const SizedBox(height: 12),
               Wrap(
-                spacing: 8,
-                runSpacing: 8,
+                spacing: 6,
+                runSpacing: 6,
                 children: [
                   Chip(
-                    avatar: const Icon(Icons.calendar_month_outlined, size: 18),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    labelStyle: Theme.of(context).textTheme.labelSmall,
+                    avatar: const Icon(Icons.calendar_month_outlined, size: 14),
                     label: Text('${goalMetrics.daysRemaining} days left'),
                   ),
                   Chip(
-                    avatar: const Icon(Icons.timelapse_rounded, size: 18),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    labelStyle: Theme.of(context).textTheme.labelSmall,
+                    avatar: const Icon(Icons.timelapse_rounded, size: 14),
                     label: Text(
                       goalMetrics.estimatedDays == null
                           ? 'Pace not available'
@@ -385,7 +406,10 @@ class _SummaryCard extends StatelessWidget {
                     ),
                   ),
                   Chip(
-                    avatar: const Icon(Icons.percent_rounded, size: 18),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    labelStyle: Theme.of(context).textTheme.labelSmall,
+                    avatar: const Icon(Icons.percent_rounded, size: 14),
                     label: Text(
                       goalMetrics.requiredDailyPercent == null
                           ? 'Daily target unavailable'
