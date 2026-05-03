@@ -165,6 +165,40 @@ void main() {
     expect(find.byKey(const Key('reader-progress-card')), findsNothing);
   });
 
+  testWidgets('reader keeps ayah markers out of the RichText span tree',
+      (tester) async {
+    final controller = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: SurahReaderPage(
+          controller: controller,
+          surahIndex: 1,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final richTextFinder = find.descendant(
+      of: find.byKey(const Key('continuous-ayah-text')),
+      matching: find.byType(RichText),
+    );
+    final richText = tester.widget<RichText>(richTextFinder.first);
+
+    expect(_containsWidgetSpan(richText.text), isFalse);
+    expect(find.byKey(const Key('ayah-1-1')), findsOneWidget);
+    expect(find.byKey(const Key('ayah-1-2')), findsOneWidget);
+    expect(tester.getSize(find.byKey(const Key('ayah-1-1'))).height,
+        greaterThan(20));
+    expect(tester.getSize(find.byKey(const Key('ayah-1-1'))).width,
+        greaterThan(20));
+  });
+
   testWidgets('reader shows a basmala header for surahs other than 1 and 9',
       (tester) async {
     final controller = QuranAppController(
@@ -831,4 +865,14 @@ class _FakeTajweedSource implements TajweedSource {
       },
     };
   }
+}
+
+bool _containsWidgetSpan(InlineSpan span) {
+  if (span is WidgetSpan) {
+    return true;
+  }
+  if (span is TextSpan) {
+    return span.children?.any(_containsWidgetSpan) ?? false;
+  }
+  return false;
 }
