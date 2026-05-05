@@ -315,8 +315,11 @@ void main() {
         matching: find.byType(RichText),
       ),
     );
+    expect(richText.text, isA<TextSpan>());
     final paragraph = richText.text as TextSpan;
-    final inlineMarkers = paragraph.children!.whereType<WidgetSpan>().length;
+    final inlineMarkers = (paragraph.children ?? const <InlineSpan>[])
+        .whereType<WidgetSpan>()
+        .length;
 
     expect(inlineMarkers, 2);
     expect(find.byKey(const Key('ayah-1-1')), findsOneWidget);

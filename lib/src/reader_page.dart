@@ -984,6 +984,8 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
           child: _buildAyahMarker(context, ayah.number, ayahText),
         ),
       );
+      // WidgetSpan contributes a single object-replacement character to the
+      // paragraph's plain-text offsets.
       offset += 1;
 
       spans.add(const TextSpan(text: '  '));
@@ -1004,40 +1006,42 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
     int ayahNumber,
     String ayahText,
   ) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: GestureDetector(
-        key: ayahAnchorKeyFor(ayahNumber),
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          HapticFeedback.selectionClick();
-          showAyahRangeDialog(
-            context: context,
-            controller: controller,
-            surah: surah,
-            tappedAyah: ayahNumber,
-          );
-        },
-        onLongPress: () {
-          HapticFeedback.mediumImpact();
-          showAyahInsightDialog(
-            context: context,
-            controller: controller,
-            request: AyahInsightRequest(
-              surahIndex: surah.index,
-              surahName: surah.englishName,
-              ayahNumber: ayahNumber,
-              ayahText: ayahText,
+    return KeyedSubtree(
+      key: ayahAnchorKeyFor(ayahNumber),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: GestureDetector(
+          key: Key('ayah-${surah.index}-$ayahNumber'),
+          behavior: HitTestBehavior.opaque,
+          onTap: () {
+            HapticFeedback.selectionClick();
+            showAyahRangeDialog(
+              context: context,
+              controller: controller,
+              surah: surah,
+              tappedAyah: ayahNumber,
+            );
+          },
+          onLongPress: () {
+            HapticFeedback.mediumImpact();
+            showAyahInsightDialog(
+              context: context,
+              controller: controller,
+              request: AyahInsightRequest(
+                surahIndex: surah.index,
+                surahName: surah.englishName,
+                ayahNumber: ayahNumber,
+                ayahText: ayahText,
+              ),
+            );
+          },
+          child: Semantics(
+            button: true,
+            label: 'Ayah $ayahNumber',
+            child: _AyahMarker(
+              number: ayahNumber,
+              fillColor: palette.markerFillColor,
             ),
-          );
-        },
-        child: Semantics(
-          button: true,
-          label: 'Ayah $ayahNumber',
-          child: _AyahMarker(
-            key: Key('ayah-${surah.index}-$ayahNumber'),
-            number: ayahNumber,
-            fillColor: palette.markerFillColor,
           ),
         ),
       ),
