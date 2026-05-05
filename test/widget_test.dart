@@ -317,11 +317,17 @@ void main() {
     );
     expect(richText.text, isA<TextSpan>());
     final paragraph = richText.text as TextSpan;
-    final inlineMarkers = (paragraph.children ?? const <InlineSpan>[])
+    final inlineMarkerSpans = (paragraph.children ?? const <InlineSpan>[])
         .whereType<WidgetSpan>()
-        .length;
+        .toList(growable: false);
 
-    expect(inlineMarkers, 2);
+    expect(inlineMarkerSpans, hasLength(2));
+    expect(
+      inlineMarkerSpans.every(
+        (span) => span.alignment == PlaceholderAlignment.middle,
+      ),
+      isTrue,
+    );
     expect(find.byKey(const Key('ayah-1-1')), findsOneWidget);
     expect(find.byKey(const Key('ayah-1-2')), findsOneWidget);
   });

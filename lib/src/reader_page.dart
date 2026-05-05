@@ -1037,7 +1037,7 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
           },
           child: Semantics(
             button: true,
-            label: 'Ayah $ayahNumber',
+            label: 'Ayah $ayahNumber of ${surah.englishName}',
             child: _AyahMarker(
               number: ayahNumber,
               fillColor: palette.markerFillColor,
