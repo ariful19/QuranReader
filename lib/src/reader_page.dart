@@ -1006,42 +1006,40 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
     int ayahNumber,
     String ayahText,
   ) {
-    return KeyedSubtree(
+    return Padding(
       key: ayahAnchorKeyFor(ayahNumber),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 2),
-        child: GestureDetector(
-          key: Key('ayah-${surah.index}-$ayahNumber'),
-          behavior: HitTestBehavior.opaque,
-          onTap: () {
-            HapticFeedback.selectionClick();
-            showAyahRangeDialog(
-              context: context,
-              controller: controller,
-              surah: surah,
-              tappedAyah: ayahNumber,
-            );
-          },
-          onLongPress: () {
-            HapticFeedback.mediumImpact();
-            showAyahInsightDialog(
-              context: context,
-              controller: controller,
-              request: AyahInsightRequest(
-                surahIndex: surah.index,
-                surahName: surah.englishName,
-                ayahNumber: ayahNumber,
-                ayahText: ayahText,
-              ),
-            );
-          },
-          child: Semantics(
-            button: true,
-            label: 'Ayah $ayahNumber of ${surah.englishName}',
-            child: _AyahMarker(
-              number: ayahNumber,
-              fillColor: palette.markerFillColor,
+      padding: const EdgeInsets.symmetric(horizontal: 2),
+      child: GestureDetector(
+        key: Key('ayah-${surah.index}-$ayahNumber'),
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          showAyahRangeDialog(
+            context: context,
+            controller: controller,
+            surah: surah,
+            tappedAyah: ayahNumber,
+          );
+        },
+        onLongPress: () {
+          HapticFeedback.mediumImpact();
+          showAyahInsightDialog(
+            context: context,
+            controller: controller,
+            request: AyahInsightRequest(
+              surahIndex: surah.index,
+              surahName: surah.englishName,
+              ayahNumber: ayahNumber,
+              ayahText: ayahText,
             ),
+          );
+        },
+        child: Semantics(
+          button: true,
+          label: 'Ayah $ayahNumber of ${surah.englishName}',
+          child: _AyahMarker(
+            number: ayahNumber,
+            fillColor: palette.markerFillColor,
           ),
         ),
       ),
@@ -1114,7 +1112,6 @@ class _InteractiveWordTarget {
 
 class _AyahMarker extends StatelessWidget {
   const _AyahMarker({
-    super.key,
     required this.number,
     required this.fillColor,
   });
