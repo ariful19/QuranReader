@@ -376,10 +376,18 @@ void main() {
         matching: find.byType(RichText),
       ),
     );
+    final paragraph = richText.text as TextSpan;
+    final children = paragraph.children ?? const <InlineSpan>[];
+    final firstMarkerIndex = children.indexWhere((span) => span is WidgetSpan);
 
     expect(markerOne, findsOneWidget);
     expect(markerTwo, findsOneWidget);
     expect(richText.text.toPlainText(), contains('\u200F'));
+    expect(firstMarkerIndex, greaterThan(0));
+    expect(children[firstMarkerIndex - 1], isA<TextSpan>());
+    expect((children[firstMarkerIndex - 1] as TextSpan).text, '\u200F');
+    expect(children[firstMarkerIndex + 1], isA<TextSpan>());
+    expect((children[firstMarkerIndex + 1] as TextSpan).text, '\u200F  ');
     expect(
       find.descendant(of: markerOne, matching: find.text('١')),
       findsOneWidget,

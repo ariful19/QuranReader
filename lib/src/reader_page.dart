@@ -1144,23 +1144,24 @@ class _AyahMarker extends StatelessWidget {
   }
 }
 
+const Map<String, String> _arabicIndicDigitMap = {
+  '0': '٠',
+  '1': '١',
+  '2': '٢',
+  '3': '٣',
+  '4': '٤',
+  '5': '٥',
+  '6': '٦',
+  '7': '٧',
+  '8': '٨',
+  '9': '٩',
+};
+
 String _toArabicIndicDigits(int value) {
-  const digitMap = {
-    '0': '٠',
-    '1': '١',
-    '2': '٢',
-    '3': '٣',
-    '4': '٤',
-    '5': '٥',
-    '6': '٦',
-    '7': '٧',
-    '8': '٨',
-    '9': '٩',
-  };
   return value
       .toString()
       .split('')
-      .map((char) => digitMap[char] ?? char)
+      .map((char) => _arabicIndicDigitMap[char] ?? char)
       .join();
 }
 
