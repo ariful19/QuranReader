@@ -886,93 +886,50 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
     final presentation = _buildPresentation(context);
     final paragraph = TextSpan(style: baseStyle, children: presentation.spans);
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxWidth = constraints.hasBoundedWidth
-            ? constraints.maxWidth
-            : MediaQuery.sizeOf(context).width;
-        final textPainter = TextPainter(
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTapUp: (details) {
+        final target =
+            _wordTargetForOffset(details.localPosition, presentation);
+        if (target == null) {
+          return;
+        }
+        HapticFeedback.selectionClick();
+        showAyahRangeDialog(
+          context: context,
+          controller: controller,
+          surah: surah,
+          tappedAyah: target.ayahNumber,
+        );
+      },
+      onLongPressStart: (details) {
+        final target =
+            _wordTargetForOffset(details.localPosition, presentation);
+        if (target == null) {
+          return;
+        }
+        HapticFeedback.mediumImpact();
+        showWordInsightDialog(
+          context: context,
+          controller: controller,
+          request: target.request,
+        );
+      },
+      child: KeyedSubtree(
+        key: const Key('continuous-ayah-text'),
+        child: RichText(
+          key: _richTextKey,
           text: paragraph,
           textAlign: TextAlign.justify,
           textDirection: TextDirection.rtl,
-          textScaler: MediaQuery.textScalerOf(context),
-        )..layout(maxWidth: maxWidth);
-
-        final markerOverlays = <Widget>[
-          for (final marker in presentation.markerTargets)
-            if (_markerRectFor(textPainter, marker.range) case final rect?)
-              Positioned(
-                left: rect.center.dx,
-                top: rect.center.dy,
-                child: FractionalTranslation(
-                  translation: const Offset(-0.5, -0.5),
-                  child: _buildAyahMarkerOverlay(context, marker),
-                ),
-              ),
-        ];
-
-        return GestureDetector(
-          behavior: HitTestBehavior.translucent,
-          onTapUp: (details) {
-            final target =
-                _wordTargetForOffset(details.localPosition, presentation);
-            if (target == null) {
-              return;
-            }
-            HapticFeedback.selectionClick();
-            showAyahRangeDialog(
-              context: context,
-              controller: controller,
-              surah: surah,
-              tappedAyah: target.ayahNumber,
-            );
-          },
-          onLongPressStart: (details) {
-            final target =
-                _wordTargetForOffset(details.localPosition, presentation);
-            if (target == null) {
-              return;
-            }
-            HapticFeedback.mediumImpact();
-            showWordInsightDialog(
-              context: context,
-              controller: controller,
-              request: target.request,
-            );
-          },
-          child: KeyedSubtree(
-            key: const Key('continuous-ayah-text'),
-            child: SizedBox(
-              width: maxWidth,
-              height: textPainter.height,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  SizedBox(
-                    width: maxWidth,
-                    height: textPainter.height,
-                    child: RichText(
-                      key: _richTextKey,
-                      text: paragraph,
-                      textAlign: TextAlign.justify,
-                      textDirection: TextDirection.rtl,
-                    ),
-                  ),
-                  ...markerOverlays,
-                ],
-              ),
-            ),
-          ),
-        );
-      },
+        ),
+      ),
     );
   }
 
   _AyahTextPresentation _buildPresentation(BuildContext context) {
     final spans = <InlineSpan>[];
     final wordTargets = <_InteractiveWordTarget>[];
-    final markerTargets = <_AyahMarkerTarget>[];
-    final markerPlaceholderStyle = _markerPlaceholderStyle(context);
     var offset = 0;
 
     // Force RTL for the entire paragraph to prevent justification issues
@@ -1021,24 +978,15 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
       spans.add(_buildAyahTextSpan(displayRuns, savedColor));
       offset += ayahText.length;
 
-      final markerPlaceholderText = _markerPlaceholderText(ayah.number);
       spans.add(
-        TextSpan(
-          text: markerPlaceholderText,
-          style: markerPlaceholderStyle,
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: _buildAyahMarker(context, ayah.number, ayahText),
         ),
       );
-      markerTargets.add(
-        _AyahMarkerTarget(
-          range: TextRange(
-            start: offset,
-            end: offset + markerPlaceholderText.length,
-          ),
-          ayahNumber: ayah.number,
-          ayahText: ayahText,
-        ),
-      );
-      offset += markerPlaceholderText.length;
+      // WidgetSpan contributes a single object-replacement character to the
+      // paragraph's plain-text offsets.
+      offset += 1;
 
       spans.add(const TextSpan(text: '  '));
       offset += 2;
@@ -1050,18 +998,19 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
     return _AyahTextPresentation(
       spans: spans,
       wordTargets: wordTargets,
-      markerTargets: markerTargets,
     );
   }
 
-  Widget _buildAyahMarkerOverlay(
+  Widget _buildAyahMarker(
     BuildContext context,
-    _AyahMarkerTarget marker,
+    int ayahNumber,
+    String ayahText,
   ) {
-    return Container(
-      key: ayahAnchorKeyFor(marker.ayahNumber),
+    return Padding(
+      key: ayahAnchorKeyFor(ayahNumber),
+      padding: const EdgeInsets.symmetric(horizontal: 2),
       child: GestureDetector(
-        key: Key('ayah-${surah.index}-${marker.ayahNumber}'),
+        key: Key('ayah-${surah.index}-$ayahNumber'),
         behavior: HitTestBehavior.opaque,
         onTap: () {
           HapticFeedback.selectionClick();
@@ -1069,7 +1018,7 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
             context: context,
             controller: controller,
             surah: surah,
-            tappedAyah: marker.ayahNumber,
+            tappedAyah: ayahNumber,
           );
         },
         onLongPress: () {
@@ -1080,14 +1029,18 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
             request: AyahInsightRequest(
               surahIndex: surah.index,
               surahName: surah.englishName,
-              ayahNumber: marker.ayahNumber,
-              ayahText: marker.ayahText,
+              ayahNumber: ayahNumber,
+              ayahText: ayahText,
             ),
           );
         },
-        child: _AyahMarker(
-          number: marker.ayahNumber,
-          fillColor: palette.markerFillColor,
+        child: Semantics(
+          button: true,
+          label: 'Ayah $ayahNumber of ${surah.englishName}',
+          child: _AyahMarker(
+            number: ayahNumber,
+            fillColor: palette.markerFillColor,
+          ),
         ),
       ),
     );
@@ -1116,47 +1069,6 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
     return _tajweedLegendColors[bucket];
   }
 
-  TextStyle _markerPlaceholderStyle(BuildContext context) {
-    return Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: Colors.transparent,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.4,
-              height: 1,
-            ) ??
-        const TextStyle(
-          color: Colors.transparent,
-          fontSize: 15,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.4,
-          height: 1,
-        );
-  }
-
-  String _markerPlaceholderText(int ayahNumber) {
-    final digits = '$ayahNumber';
-    final sidePadding = switch (digits.length) {
-      1 => '\u00A0\u00A0\u00A0',
-      2 => '\u00A0\u00A0',
-      _ => '\u00A0',
-    };
-    return '\u200F$sidePadding$digits$sidePadding\u200F';
-  }
-
-  Rect? _markerRectFor(TextPainter textPainter, TextRange range) {
-    final boxes = textPainter.getBoxesForSelection(
-      TextSelection(baseOffset: range.start, extentOffset: range.end),
-    );
-    if (boxes.isEmpty) {
-      return null;
-    }
-
-    var rect = boxes.first.toRect();
-    for (final box in boxes.skip(1)) {
-      rect = rect.expandToInclude(box.toRect());
-    }
-    return rect;
-  }
-
   _InteractiveWordTarget? _wordTargetForOffset(
     Offset localPosition,
     _AyahTextPresentation presentation,
@@ -1180,12 +1092,10 @@ class _AyahTextPresentation {
   const _AyahTextPresentation({
     required this.spans,
     required this.wordTargets,
-    required this.markerTargets,
   });
 
   final List<InlineSpan> spans;
   final List<_InteractiveWordTarget> wordTargets;
-  final List<_AyahMarkerTarget> markerTargets;
 }
 
 class _InteractiveWordTarget {
@@ -1198,18 +1108,6 @@ class _InteractiveWordTarget {
   final TextRange range;
   final int ayahNumber;
   final WordInsightRequest request;
-}
-
-class _AyahMarkerTarget {
-  const _AyahMarkerTarget({
-    required this.range,
-    required this.ayahNumber,
-    required this.ayahText,
-  });
-
-  final TextRange range;
-  final int ayahNumber;
-  final String ayahText;
 }
 
 class _AyahMarker extends StatelessWidget {

@@ -278,6 +278,60 @@ void main() {
     expect(find.byKey(const Key('reader-basmala-header')), findsNothing);
   });
 
+  testWidgets('reader renders ayah markers inline with widget spans',
+      (tester) async {
+    final controller = QuranAppController(
+      catalogSource: const _StaticCatalogSource([
+        SurahData(
+          index: 1,
+          arabicName: 'الفاتحة',
+          englishName: 'The Opening',
+          chronologicalOrder: 5,
+          totalUnicodeChars: 24,
+          ayahs: [
+            AyahData(number: 1, text: 'بِسۡمِ ٱللَّهِ'),
+            AyahData(number: 2, text: 'ٱلۡحَمۡدُ لِلَّهِ'),
+          ],
+        ),
+      ]),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: SurahReaderPage(
+          controller: controller,
+          surahIndex: 1,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final richText = tester.widget<RichText>(
+      find.descendant(
+        of: find.byKey(const Key('continuous-ayah-text')),
+        matching: find.byType(RichText),
+      ),
+    );
+    expect(richText.text, isA<TextSpan>());
+    final paragraph = richText.text as TextSpan;
+    final inlineMarkerSpans = (paragraph.children ?? const <InlineSpan>[])
+        .whereType<WidgetSpan>()
+        .toList(growable: false);
+
+    expect(inlineMarkerSpans, hasLength(2));
+    expect(
+      inlineMarkerSpans.every(
+        (span) => span.alignment == PlaceholderAlignment.middle,
+      ),
+      isTrue,
+    );
+    expect(find.byKey(const Key('ayah-1-1')), findsOneWidget);
+    expect(find.byKey(const Key('ayah-1-2')), findsOneWidget);
+  });
+
   testWidgets('saving a later custom range and closing dialog does not assert',
       (tester) async {
     tester.view.physicalSize = const Size(400, 700);
