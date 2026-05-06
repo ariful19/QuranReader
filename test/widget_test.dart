@@ -370,9 +370,16 @@ void main() {
 
     final markerOne = find.byKey(const Key('ayah-1-1'));
     final markerTwo = find.byKey(const Key('ayah-1-2'));
+    final richText = tester.widget<RichText>(
+      find.descendant(
+        of: find.byKey(const Key('continuous-ayah-text')),
+        matching: find.byType(RichText),
+      ),
+    );
 
     expect(markerOne, findsOneWidget);
     expect(markerTwo, findsOneWidget);
+    expect(richText.text.toPlainText(), contains('\u200F'));
     expect(
       find.descendant(of: markerOne, matching: find.text('١')),
       findsOneWidget,
@@ -381,7 +388,10 @@ void main() {
       find.descendant(of: markerTwo, matching: find.text('٢')),
       findsOneWidget,
     );
-    expect(tester.getCenter(markerOne).dx, greaterThan(tester.getCenter(markerTwo).dx));
+    expect(
+      tester.getCenter(markerOne).dx,
+      greaterThan(tester.getCenter(markerTwo).dx),
+    );
   });
 
   testWidgets('saving a later custom range and closing dialog does not assert',

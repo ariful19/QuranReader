@@ -1145,12 +1145,22 @@ class _AyahMarker extends StatelessWidget {
 }
 
 String _toArabicIndicDigits(int value) {
-  const western = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
-  const eastern = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  const digitMap = {
+    '0': '٠',
+    '1': '١',
+    '2': '٢',
+    '3': '٣',
+    '4': '٤',
+    '5': '٥',
+    '6': '٦',
+    '7': '٧',
+    '8': '٨',
+    '9': '٩',
+  };
   return value
       .toString()
       .split('')
-      .map((digit) => eastern[western.indexOf(digit)])
+      .map((char) => digitMap[char] ?? char)
       .join();
 }
 
