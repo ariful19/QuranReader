@@ -9,6 +9,7 @@ import 'package:quran_reader/src/quran_repository.dart';
 import 'package:quran_reader/src/reader_page.dart';
 
 const _expectedBasmalaText = 'بِسۡمِ ٱللَّهِ ٱلرَّحۡمَـٰنِ ٱلرَّحِيمِ';
+const _rtlMark = '\u200F';
 
 void main() {
   test('removing the bookmarked merged range clears the last saved bookmark',
@@ -330,6 +331,77 @@ void main() {
     );
     expect(find.byKey(const Key('ayah-1-1')), findsOneWidget);
     expect(find.byKey(const Key('ayah-1-2')), findsOneWidget);
+  });
+
+  testWidgets('reader renders ayah markers with RTL order and Arabic numerals',
+      (tester) async {
+    // Keep both markers on a single line so their horizontal order is stable.
+    tester.view.physicalSize = const Size(1000, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = QuranAppController(
+      catalogSource: const _StaticCatalogSource([
+        SurahData(
+          index: 1,
+          arabicName: 'الفاتحة',
+          englishName: 'The Opening',
+          chronologicalOrder: 5,
+          totalUnicodeChars: 2,
+          ayahs: [
+            AyahData(number: 1, text: 'ب'),
+            AyahData(number: 2, text: 'ت'),
+          ],
+        ),
+      ]),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: SurahReaderPage(
+          controller: controller,
+          surahIndex: 1,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final markerOne = find.byKey(const Key('ayah-1-1'));
+    final markerTwo = find.byKey(const Key('ayah-1-2'));
+    final richText = tester.widget<RichText>(
+      find.descendant(
+        of: find.byKey(const Key('continuous-ayah-text')),
+        matching: find.byType(RichText),
+      ),
+    );
+    final paragraph = richText.text as TextSpan;
+    final children = paragraph.children ?? const <InlineSpan>[];
+    final firstMarkerIndex = children.indexWhere((span) => span is WidgetSpan);
+
+    expect(markerOne, findsOneWidget);
+    expect(markerTwo, findsOneWidget);
+    expect(richText.text.toPlainText(), contains(_rtlMark));
+    expect(firstMarkerIndex, greaterThan(0));
+    expect(children[firstMarkerIndex - 1], isA<TextSpan>());
+    expect((children[firstMarkerIndex - 1] as TextSpan).text, _rtlMark);
+    expect(children[firstMarkerIndex + 1], isA<TextSpan>());
+    expect((children[firstMarkerIndex + 1] as TextSpan).text, '$_rtlMark  ');
+    expect(
+      find.descendant(of: markerOne, matching: find.text('١')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: markerTwo, matching: find.text('٢')),
+      findsOneWidget,
+    );
+    expect(
+      tester.getCenter(markerOne).dx,
+      greaterThan(tester.getCenter(markerTwo).dx),
+    );
   });
 
   testWidgets('saving a later custom range and closing dialog does not assert',
