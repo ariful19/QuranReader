@@ -978,6 +978,9 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
       spans.add(_buildAyahTextSpan(displayRuns, savedColor));
       offset += ayahText.length;
 
+      spans.add(const TextSpan(text: '\u200F'));
+      offset += 1;
+
       spans.add(
         WidgetSpan(
           alignment: PlaceholderAlignment.middle,
@@ -988,8 +991,8 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
       // paragraph's plain-text offsets.
       offset += 1;
 
-      spans.add(const TextSpan(text: '  '));
-      offset += 2;
+      spans.add(const TextSpan(text: '\u200F  '));
+      offset += 3;
     }
 
     spans.add(const TextSpan(text: '\u202C'));
@@ -1130,7 +1133,8 @@ class _AyahMarker extends StatelessWidget {
         border: Border.all(color: Colors.white, width: 1.5),
       ),
       child: Text(
-        '$number',
+        _toArabicIndicDigits(number),
+        textDirection: TextDirection.rtl,
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
               color: Colors.white,
               fontWeight: FontWeight.w700,
@@ -1138,6 +1142,16 @@ class _AyahMarker extends StatelessWidget {
       ),
     );
   }
+}
+
+String _toArabicIndicDigits(int value) {
+  const western = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+  const eastern = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  return value
+      .toString()
+      .split('')
+      .map((digit) => eastern[western.indexOf(digit)])
+      .join();
 }
 
 const Map<TajweedLegendBucket, Color> _tajweedLegendColors = {

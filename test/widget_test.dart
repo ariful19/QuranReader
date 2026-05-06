@@ -332,6 +332,58 @@ void main() {
     expect(find.byKey(const Key('ayah-1-2')), findsOneWidget);
   });
 
+  testWidgets('reader renders ayah markers with RTL order and Arabic numerals',
+      (tester) async {
+    tester.view.physicalSize = const Size(1000, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final controller = QuranAppController(
+      catalogSource: const _StaticCatalogSource([
+        SurahData(
+          index: 1,
+          arabicName: 'الفاتحة',
+          englishName: 'The Opening',
+          chronologicalOrder: 5,
+          totalUnicodeChars: 2,
+          ayahs: [
+            AyahData(number: 1, text: 'ب'),
+            AyahData(number: 2, text: 'ت'),
+          ],
+        ),
+      ]),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: SurahReaderPage(
+          controller: controller,
+          surahIndex: 1,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final markerOne = find.byKey(const Key('ayah-1-1'));
+    final markerTwo = find.byKey(const Key('ayah-1-2'));
+
+    expect(markerOne, findsOneWidget);
+    expect(markerTwo, findsOneWidget);
+    expect(
+      find.descendant(of: markerOne, matching: find.text('١')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: markerTwo, matching: find.text('٢')),
+      findsOneWidget,
+    );
+    expect(tester.getCenter(markerOne).dx, greaterThan(tester.getCenter(markerTwo).dx));
+  });
+
   testWidgets('saving a later custom range and closing dialog does not assert',
       (tester) async {
     tester.view.physicalSize = const Size(400, 700);

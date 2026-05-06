@@ -75,7 +75,7 @@ flutter test
 GitHub Actions now:
 
 - runs `flutter analyze` and `flutter test` on pull requests and pushes to `main`
-- builds `app-release.apk` on manual workflow runs and version tags like `v1.0.0`
+- builds `app-release.apk` on pushes to `main`, manual workflow runs, and version tags like `v1.0.0`
 - publishes tagged APKs to GitHub Releases, which keeps the latest download link above up to date
 
 ## Android Release Signing
