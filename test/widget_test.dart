@@ -9,6 +9,7 @@ import 'package:quran_reader/src/quran_repository.dart';
 import 'package:quran_reader/src/reader_page.dart';
 
 const _expectedBasmalaText = 'بِسۡمِ ٱللَّهِ ٱلرَّحۡمَـٰنِ ٱلرَّحِيمِ';
+const _rtlMark = '\u200F';
 
 void main() {
   test('removing the bookmarked merged range clears the last saved bookmark',
@@ -334,6 +335,7 @@ void main() {
 
   testWidgets('reader renders ayah markers with RTL order and Arabic numerals',
       (tester) async {
+    // Keep both markers on a single line so their horizontal order is stable.
     tester.view.physicalSize = const Size(1000, 600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -382,12 +384,12 @@ void main() {
 
     expect(markerOne, findsOneWidget);
     expect(markerTwo, findsOneWidget);
-    expect(richText.text.toPlainText(), contains('\u200F'));
+    expect(richText.text.toPlainText(), contains(_rtlMark));
     expect(firstMarkerIndex, greaterThan(0));
     expect(children[firstMarkerIndex - 1], isA<TextSpan>());
-    expect((children[firstMarkerIndex - 1] as TextSpan).text, '\u200F');
+    expect((children[firstMarkerIndex - 1] as TextSpan).text, _rtlMark);
     expect(children[firstMarkerIndex + 1], isA<TextSpan>());
-    expect((children[firstMarkerIndex + 1] as TextSpan).text, '\u200F  ');
+    expect((children[firstMarkerIndex + 1] as TextSpan).text, '$_rtlMark  ');
     expect(
       find.descendant(of: markerOne, matching: find.text('١')),
       findsOneWidget,
