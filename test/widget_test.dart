@@ -9,7 +9,6 @@ import 'package:quran_reader/src/quran_repository.dart';
 import 'package:quran_reader/src/reader_page.dart';
 
 const _expectedBasmalaText = 'بِسۡمِ ٱللَّهِ ٱلرَّحۡمَـٰنِ ٱلرَّحِيمِ';
-const _rtlMark = '\u200F';
 
 void main() {
   test('removing the bookmarked merged range clears the last saved bookmark',
@@ -279,8 +278,7 @@ void main() {
     expect(find.byKey(const Key('reader-basmala-header')), findsNothing);
   });
 
-  testWidgets('reader renders ayah markers inline with widget spans',
-      (tester) async {
+  testWidgets('reader renders ayah marker text inline', (tester) async {
     final controller = QuranAppController(
       catalogSource: const _StaticCatalogSource([
         SurahData(
@@ -310,25 +308,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final richText = tester.widget<RichText>(
-      find.descendant(
-        of: find.byKey(const Key('continuous-ayah-text')),
-        matching: find.byType(RichText),
-      ),
-    );
+    final richText =
+        tester.widgetList<RichText>(find.byType(RichText)).firstWhere(
+              (candidate) => candidate.textAlign == TextAlign.justify,
+            );
     expect(richText.text, isA<TextSpan>());
-    final paragraph = richText.text as TextSpan;
-    final inlineMarkerSpans = (paragraph.children ?? const <InlineSpan>[])
-        .whereType<WidgetSpan>()
-        .toList(growable: false);
-
-    expect(inlineMarkerSpans, hasLength(2));
-    expect(
-      inlineMarkerSpans.every(
-        (span) => span.alignment == PlaceholderAlignment.middle,
-      ),
-      isTrue,
-    );
+    expect(_containsWidgetSpan(richText.text), isFalse);
+    expect(richText.text.toPlainText(), contains('﴿١﴾'));
+    expect(richText.text.toPlainText(), contains('﴿٢﴾'));
     expect(find.byKey(const Key('ayah-1-1')), findsOneWidget);
     expect(find.byKey(const Key('ayah-1-2')), findsOneWidget);
   });
@@ -372,32 +359,16 @@ void main() {
 
     final markerOne = find.byKey(const Key('ayah-1-1'));
     final markerTwo = find.byKey(const Key('ayah-1-2'));
-    final richText = tester.widget<RichText>(
-      find.descendant(
-        of: find.byKey(const Key('continuous-ayah-text')),
-        matching: find.byType(RichText),
-      ),
-    );
-    final paragraph = richText.text as TextSpan;
-    final children = paragraph.children ?? const <InlineSpan>[];
-    final firstMarkerIndex = children.indexWhere((span) => span is WidgetSpan);
+    final richText =
+        tester.widgetList<RichText>(find.byType(RichText)).firstWhere(
+              (candidate) => candidate.textAlign == TextAlign.justify,
+            );
 
     expect(markerOne, findsOneWidget);
     expect(markerTwo, findsOneWidget);
-    expect(richText.text.toPlainText(), contains(_rtlMark));
-    expect(firstMarkerIndex, greaterThan(0));
-    expect(children[firstMarkerIndex - 1], isA<TextSpan>());
-    expect((children[firstMarkerIndex - 1] as TextSpan).text, _rtlMark);
-    expect(children[firstMarkerIndex + 1], isA<TextSpan>());
-    expect((children[firstMarkerIndex + 1] as TextSpan).text, '$_rtlMark  ');
-    expect(
-      find.descendant(of: markerOne, matching: find.text('١')),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: markerTwo, matching: find.text('٢')),
-      findsOneWidget,
-    );
+    expect(_containsWidgetSpan(richText.text), isFalse);
+    expect(richText.text.toPlainText(), contains('﴿١﴾'));
+    expect(richText.text.toPlainText(), contains('﴿٢﴾'));
     expect(
       tester.getCenter(markerOne).dx,
       greaterThan(tester.getCenter(markerTwo).dx),

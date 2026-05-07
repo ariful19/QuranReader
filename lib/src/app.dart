@@ -1,8 +1,19 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app_controller.dart';
 import 'home_page.dart';
+import 'reader_page.dart';
 import 'screen_awake_manager.dart';
+
+const int _debugInitialSurahIndex = int.fromEnvironment(
+  'QURAN_READER_DEBUG_INITIAL_SURAH',
+  defaultValue: 0,
+);
+const int _debugInitialAyahNumber = int.fromEnvironment(
+  'QURAN_READER_DEBUG_INITIAL_AYAH',
+  defaultValue: 0,
+);
 
 class QuranReaderBootstrap extends StatefulWidget {
   const QuranReaderBootstrap({super.key});
@@ -41,7 +52,17 @@ class _QuranReaderBootstrapState extends State<QuranReaderBootstrap> {
           if (snapshot.hasError || !snapshot.hasData) {
             return _ErrorView(error: snapshot.error);
           }
-          return QuranHomePage(controller: snapshot.data!);
+          final controller = snapshot.data!;
+          if (kDebugMode && _debugInitialSurahIndex > 0) {
+            return SurahReaderPage(
+              controller: controller,
+              surahIndex: _debugInitialSurahIndex,
+              initialAyahNumber: _debugInitialAyahNumber > 0
+                  ? _debugInitialAyahNumber
+                  : null,
+            );
+          }
+          return QuranHomePage(controller: controller);
         },
       ),
     );

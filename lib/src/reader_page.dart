@@ -802,6 +802,7 @@ class _ContinuousAyahText extends StatefulWidget {
 
 class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
   final GlobalKey _richTextKey = GlobalKey();
+  List<_AyahMarkerOverlay> _markerOverlays = const <_AyahMarkerOverlay>[];
 
   SurahData get surah => widget.surah;
   QuranAppController get controller => widget.controller;
@@ -885,6 +886,12 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
         );
     final presentation = _buildPresentation(context);
     final paragraph = TextSpan(style: baseStyle, children: presentation.spans);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _syncMarkerOverlays(presentation);
+    });
 
     return GestureDetector(
       behavior: HitTestBehavior.translucent,
@@ -915,14 +922,138 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
           request: target.request,
         );
       },
-      child: KeyedSubtree(
-        key: const Key('continuous-ayah-text'),
-        child: RichText(
-          key: _richTextKey,
-          text: paragraph,
-          textAlign: TextAlign.justify,
-          textDirection: TextDirection.rtl,
-        ),
+      child: Stack(
+        children: [
+          KeyedSubtree(
+            key: const Key('continuous-ayah-text'),
+            child: RichText(
+              key: _richTextKey,
+              text: paragraph,
+              textAlign: TextAlign.justify,
+              textDirection: TextDirection.rtl,
+            ),
+          ),
+          for (final overlay in _markerOverlays)
+            Positioned(
+              left: overlay.rect.left,
+              top: overlay.rect.top,
+              width: overlay.rect.width,
+              height: overlay.rect.height,
+              child: KeyedSubtree(
+                key: ayahAnchorKeyFor(overlay.target.ayahNumber),
+                child: GestureDetector(
+                  key: Key('ayah-${surah.index}-${overlay.target.ayahNumber}'),
+                  behavior: HitTestBehavior.translucent,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    showAyahRangeDialog(
+                      context: context,
+                      controller: controller,
+                      surah: surah,
+                      tappedAyah: overlay.target.ayahNumber,
+                    );
+                  },
+                  onLongPress: () {
+                    HapticFeedback.mediumImpact();
+                    showAyahInsightDialog(
+                      context: context,
+                      controller: controller,
+                      request: overlay.target.request,
+                    );
+                  },
+                  child: Semantics(
+                    button: true,
+                    label:
+                        'Ayah ${overlay.target.ayahNumber} of ${surah.englishName}',
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  void _syncMarkerOverlays(_AyahTextPresentation presentation) {
+    final renderObject = _richTextKey.currentContext?.findRenderObject();
+    if (renderObject is! RenderParagraph) {
+      return;
+    }
+
+    final nextOverlays = <_AyahMarkerOverlay>[];
+    for (final target in presentation.markerTargets) {
+      final boxes = renderObject.getBoxesForSelection(
+        TextSelection(
+            baseOffset: target.range.start, extentOffset: target.range.end),
+      );
+      if (boxes.isEmpty) {
+        continue;
+      }
+
+      final rect = boxes
+          .map((box) => box.toRect())
+          .reduce((current, next) => current.expandToInclude(next))
+          .inflate(2);
+      nextOverlays.add(_AyahMarkerOverlay(target: target, rect: rect));
+    }
+
+    if (_sameMarkerOverlays(_markerOverlays, nextOverlays)) {
+      return;
+    }
+
+    setState(() {
+      _markerOverlays = nextOverlays;
+    });
+  }
+
+  bool _sameMarkerOverlays(
+    List<_AyahMarkerOverlay> left,
+    List<_AyahMarkerOverlay> right,
+  ) {
+    if (left.length != right.length) {
+      return false;
+    }
+
+    for (var index = 0; index < left.length; index += 1) {
+      if (left[index].target.ayahNumber != right[index].target.ayahNumber ||
+          left[index].rect != right[index].rect) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  String _ayahMarkerText(int ayahNumber) {
+    return '﴿${_toArabicIndicDigits(ayahNumber)}﴾';
+  }
+
+  TextSpan _buildAyahMarkerTextSpan(int ayahNumber) {
+    return TextSpan(
+      text: _ayahMarkerText(ayahNumber),
+      style: TextStyle(
+        color: palette.markerFillColor,
+        fontWeight: FontWeight.w700,
+        fontSize: fontSize * 0.74,
+        height: 1,
+      ),
+    );
+  }
+
+  _InteractiveAyahMarkerTarget _markerTargetForAyah({
+    required int ayahNumber,
+    required String ayahText,
+    required TextRange range,
+  }) {
+    return _InteractiveAyahMarkerTarget(
+      range: range,
+      ayahNumber: ayahNumber,
+      request: AyahInsightRequest(
+        surahIndex: surah.index,
+        surahName: surah.englishName,
+        ayahNumber: ayahNumber,
+        ayahText: ayahText,
       ),
     );
   }
@@ -930,12 +1061,8 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
   _AyahTextPresentation _buildPresentation(BuildContext context) {
     final spans = <InlineSpan>[];
     final wordTargets = <_InteractiveWordTarget>[];
+    final markerTargets = <_InteractiveAyahMarkerTarget>[];
     var offset = 0;
-
-    // Force RTL for the entire paragraph to prevent justification issues
-    // from flipping lines that start with widgets or neutral characters.
-    spans.add(const TextSpan(text: '\u202B'));
-    offset += 1;
 
     for (final ayah in surah.ayahs) {
       final tajweedData = _tajweedEnabled
@@ -978,74 +1105,30 @@ class _ContinuousAyahTextState extends State<_ContinuousAyahText> {
       spans.add(_buildAyahTextSpan(displayRuns, savedColor));
       offset += ayahText.length;
 
-      spans.add(const TextSpan(text: '\u200F'));
+      spans.add(const TextSpan(text: '\u00A0'));
       offset += 1;
 
-      spans.add(
-        WidgetSpan(
-          alignment: PlaceholderAlignment.middle,
-          child: _buildAyahMarker(context, ayah.number, ayahText),
+      final markerStart = offset;
+      final markerText = _ayahMarkerText(ayah.number);
+      spans.add(_buildAyahMarkerTextSpan(ayah.number));
+      offset += markerText.length;
+      markerTargets.add(
+        _markerTargetForAyah(
+          ayahNumber: ayah.number,
+          ayahText: ayahText,
+          range: TextRange(
+              start: markerStart, end: markerStart + markerText.length),
         ),
       );
-      // WidgetSpan contributes a single object-replacement character to the
-      // paragraph's plain-text offsets.
+
+      spans.add(const TextSpan(text: ' '));
       offset += 1;
-
-      spans.add(const TextSpan(text: '\u200F  '));
-      offset += 3;
     }
-
-    spans.add(const TextSpan(text: '\u202C'));
-    offset += 1;
 
     return _AyahTextPresentation(
       spans: spans,
       wordTargets: wordTargets,
-    );
-  }
-
-  Widget _buildAyahMarker(
-    BuildContext context,
-    int ayahNumber,
-    String ayahText,
-  ) {
-    return Padding(
-      key: ayahAnchorKeyFor(ayahNumber),
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: GestureDetector(
-        key: Key('ayah-${surah.index}-$ayahNumber'),
-        behavior: HitTestBehavior.opaque,
-        onTap: () {
-          HapticFeedback.selectionClick();
-          showAyahRangeDialog(
-            context: context,
-            controller: controller,
-            surah: surah,
-            tappedAyah: ayahNumber,
-          );
-        },
-        onLongPress: () {
-          HapticFeedback.mediumImpact();
-          showAyahInsightDialog(
-            context: context,
-            controller: controller,
-            request: AyahInsightRequest(
-              surahIndex: surah.index,
-              surahName: surah.englishName,
-              ayahNumber: ayahNumber,
-              ayahText: ayahText,
-            ),
-          );
-        },
-        child: Semantics(
-          button: true,
-          label: 'Ayah $ayahNumber of ${surah.englishName}',
-          child: _AyahMarker(
-            number: ayahNumber,
-            fillColor: palette.markerFillColor,
-          ),
-        ),
-      ),
+      markerTargets: markerTargets,
     );
   }
 
@@ -1095,10 +1178,12 @@ class _AyahTextPresentation {
   const _AyahTextPresentation({
     required this.spans,
     required this.wordTargets,
+    required this.markerTargets,
   });
 
   final List<InlineSpan> spans;
   final List<_InteractiveWordTarget> wordTargets;
+  final List<_InteractiveAyahMarkerTarget> markerTargets;
 }
 
 class _InteractiveWordTarget {
@@ -1113,35 +1198,26 @@ class _InteractiveWordTarget {
   final WordInsightRequest request;
 }
 
-class _AyahMarker extends StatelessWidget {
-  const _AyahMarker({
-    required this.number,
-    required this.fillColor,
+class _InteractiveAyahMarkerTarget {
+  const _InteractiveAyahMarkerTarget({
+    required this.range,
+    required this.ayahNumber,
+    required this.request,
   });
 
-  final int number;
-  final Color fillColor;
+  final TextRange range;
+  final int ayahNumber;
+  final AyahInsightRequest request;
+}
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: fillColor,
-        border: Border.all(color: Colors.white, width: 1.5),
-      ),
-      child: Text(
-        _toArabicIndicDigits(number),
-        textDirection: TextDirection.rtl,
-        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
-      ),
-    );
-  }
+class _AyahMarkerOverlay {
+  const _AyahMarkerOverlay({
+    required this.target,
+    required this.rect,
+  });
+
+  final _InteractiveAyahMarkerTarget target;
+  final Rect rect;
 }
 
 const Map<String, String> _arabicIndicDigitMap = {
