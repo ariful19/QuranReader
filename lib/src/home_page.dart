@@ -19,6 +19,7 @@ class QuranHomePage extends StatelessWidget {
     return AnimatedBuilder(
       animation: controller,
       builder: (context, _) {
+        final visibleSurahs = controller.visibleSurahs;
         return Scaffold(
           appBar: AppBar(
             title: const Text('QuranReader'),
@@ -91,10 +92,10 @@ class QuranHomePage extends StatelessWidget {
                   const SizedBox(height: 16),
                   Expanded(
                     child: ListView.separated(
-                      itemCount: controller.visibleSurahs.length,
+                      itemCount: visibleSurahs.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
-                        final surah = controller.visibleSurahs[index];
+                        final surah = visibleSurahs[index];
                         return _SurahTile(
                           key: Key('surah-tile-${surah.index}'),
                           controller: controller,

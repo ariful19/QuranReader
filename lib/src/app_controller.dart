@@ -40,6 +40,11 @@ class QuranAppController extends ChangeNotifier {
   LastSavedRangeBookmark? _lastSavedRangeBookmark;
   Map<int, int> _lastReadAyahBySurah = const {};
   bool _hasGeminiApiKey = false;
+  int _catalogTotalUnicodeChars = 0;
+  Map<int, int> _readUnicodeCharsBySurah = const {};
+  int _totalReadUnicodeChars = 0;
+  List<SurahData> _visibleSurahsCache = const [];
+  bool _isVisibleSurahsDirty = true;
 
   static Future<QuranAppController> create() async {
     final controller = QuranAppController(
@@ -73,6 +78,10 @@ class QuranAppController extends ChangeNotifier {
   bool get hasGeminiApiKey => _hasGeminiApiKey;
 
   List<SurahData> get visibleSurahs {
+    if (!_isVisibleSurahsDirty) {
+      return _visibleSurahsCache;
+    }
+
     final surahs = [..._catalog];
     surahs.sort((left, right) {
       return switch (_orderMode) {
@@ -82,40 +91,38 @@ class QuranAppController extends ChangeNotifier {
         SurahOrderMode.readPercentage => _compareByReadPercentage(left, right),
       };
     });
-    return surahs;
+    _visibleSurahsCache = List<SurahData>.unmodifiable(surahs);
+    _isVisibleSurahsDirty = false;
+    return _visibleSurahsCache;
   }
 
   int _compareByReadPercentage(SurahData left, SurahData right) {
     int group(SurahData s) {
-      final p = percentForSurah(s);
-      if (p > 0 && p < 100) return 0; // partially read
-      if (p == 0) return 1;           // not read
-      return 2;                       // read ones
+      final readUnicodeChars = readUnicodeCharsFor(s);
+      if (readUnicodeChars > 0 && readUnicodeChars < s.totalUnicodeChars) {
+        return 0;
+      }
+      if (readUnicodeChars == 0) {
+        return 1;
+      }
+      return 2;
     }
+
     final gLeft = group(left);
     final gRight = group(right);
     if (gLeft != gRight) return gLeft.compareTo(gRight);
-    
+
     return left.index.compareTo(right.index);
   }
 
   double get totalPercent {
-    final totalUnicodeChars = _catalog.fold<int>(
-      0,
-      (sum, surah) => sum + surah.totalUnicodeChars,
-    );
-    if (totalUnicodeChars == 0) {
+    if (_catalogTotalUnicodeChars == 0) {
       return 0;
     }
-    return (totalReadUnicodeChars / totalUnicodeChars) * 100;
+    return (_totalReadUnicodeChars / _catalogTotalUnicodeChars) * 100;
   }
 
-  int get totalReadUnicodeChars {
-    return _catalog.fold<int>(
-      0,
-      (sum, surah) => sum + readUnicodeCharsFor(surah),
-    );
-  }
+  int get totalReadUnicodeChars => _totalReadUnicodeChars;
 
   GoalMetrics? get goalMetrics {
     final currentGoal = _goalState;
@@ -125,11 +132,8 @@ class QuranAppController extends ChangeNotifier {
 
     final today = dateOnly(DateTime.now());
     final goalDate = dateOnly(currentGoal.goalDate);
-    final totalUnicodeChars = _catalog.fold<int>(
-      0,
-      (sum, surah) => sum + surah.totalUnicodeChars,
-    );
-    final readUnicodeChars = totalReadUnicodeChars;
+    final totalUnicodeChars = _catalogTotalUnicodeChars;
+    final readUnicodeChars = _totalReadUnicodeChars;
     final remainingUnicodeChars =
         math.max(0, totalUnicodeChars - readUnicodeChars);
     final remainingPercent = totalUnicodeChars == 0
@@ -168,6 +172,10 @@ class QuranAppController extends ChangeNotifier {
     }
 
     _catalog = await _catalogSource.loadCatalog();
+    _catalogTotalUnicodeChars = _catalog.fold<int>(
+      0,
+      (sum, surah) => sum + surah.totalUnicodeChars,
+    );
     _tajweedBySurah = await _tajweedSource.loadTajweed();
     _progressBySurah = {
       for (final surah in _catalog) surah.index: SurahProgress.empty,
@@ -186,6 +194,7 @@ class QuranAppController extends ChangeNotifier {
               SurahProgress.empty,
       };
     }
+    _refreshDerivedProgressState();
     _hasGeminiApiKey = await _aiSecretsStore.loadApiKey() != null;
 
     _isReady = true;
@@ -241,8 +250,12 @@ class QuranAppController extends ChangeNotifier {
   }
 
   int readUnicodeCharsFor(SurahData surah) {
+    return _readUnicodeCharsBySurah[surah.index] ?? 0;
+  }
+
+  int _readUnicodeCharsForRanges(SurahData surah, Iterable<AyahRange> ranges) {
     var total = 0;
-    for (final range in rangesFor(surah.index)) {
+    for (final range in ranges) {
       for (var ayahIndex = range.fromAyah;
           ayahIndex <= range.toAyah;
           ayahIndex += 1) {
@@ -252,11 +265,30 @@ class QuranAppController extends ChangeNotifier {
     return total;
   }
 
+  void _refreshDerivedProgressState() {
+    final readUnicodeCharsBySurah = <int, int>{};
+    var totalReadUnicodeChars = 0;
+
+    for (final surah in _catalog) {
+      final readUnicodeChars = _readUnicodeCharsForRanges(
+        surah,
+        _progressBySurah[surah.index]?.ranges ?? const [],
+      );
+      readUnicodeCharsBySurah[surah.index] = readUnicodeChars;
+      totalReadUnicodeChars += readUnicodeChars;
+    }
+
+    _readUnicodeCharsBySurah = readUnicodeCharsBySurah;
+    _totalReadUnicodeChars = totalReadUnicodeChars;
+    _isVisibleSurahsDirty = true;
+  }
+
   Future<void> setOrderMode(SurahOrderMode mode) async {
     if (_orderMode == mode) {
       return;
     }
     _orderMode = mode;
+    _isVisibleSurahsDirty = true;
     await _persistAndNotify();
   }
 
@@ -271,6 +303,7 @@ class QuranAppController extends ChangeNotifier {
             )
           : SurahProgress.empty,
     };
+    _refreshDerivedProgressState();
     await _persistAndNotify();
   }
 
@@ -299,6 +332,7 @@ class QuranAppController extends ChangeNotifier {
       fromAyah: fromAyah,
       toAyah: toAyah,
     );
+    _refreshDerivedProgressState();
     await _persistAndNotify();
     return null;
   }
@@ -320,6 +354,7 @@ class QuranAppController extends ChangeNotifier {
       ..._progressBySurah,
       surahIndex: SurahProgress(ranges: currentRanges),
     };
+    _refreshDerivedProgressState();
     await _persistAndNotify();
   }
 
@@ -398,6 +433,7 @@ class QuranAppController extends ChangeNotifier {
     _progressBySurah = {
       for (final surah in _catalog) surah.index: SurahProgress.empty,
     };
+    _refreshDerivedProgressState();
     await _persistAndNotify();
   }
 

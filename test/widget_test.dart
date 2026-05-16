@@ -46,6 +46,33 @@ void main() {
     expect(controller.lastReadAyahFor(1), isNull);
   });
 
+  test('visibleSurahs caches progress ordering until state changes', () async {
+    final controller = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await controller.setOrderMode(SurahOrderMode.readPercentage);
+
+    final firstReadOrder = controller.visibleSurahs;
+    final secondReadOrder = controller.visibleSurahs;
+    expect(identical(firstReadOrder, secondReadOrder), isTrue);
+    expect(firstReadOrder.map((surah) => surah.index), [1, 2]);
+
+    await controller.saveRange(
+      surah: controller.surahByIndex(2),
+      fromAyah: 1,
+      toAyah: 1,
+    );
+
+    final updatedReadOrder = controller.visibleSurahs;
+    final cachedUpdatedReadOrder = controller.visibleSurahs;
+    expect(identical(updatedReadOrder, cachedUpdatedReadOrder), isTrue);
+    expect(identical(firstReadOrder, updatedReadOrder), isFalse);
+    expect(updatedReadOrder.map((surah) => surah.index), [2, 1]);
+  });
+
   testWidgets('opens reader and saves a tapped ayah range', (tester) async {
     tester.view.physicalSize = const Size(400, 700);
     tester.view.devicePixelRatio = 1.0;
