@@ -1,11 +1,13 @@
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:uuid/uuid.dart';
 
 import 'ai_models.dart';
 import 'ai_services.dart';
 import 'models.dart';
 import 'progress_repository.dart';
+import 'progress_sync_service.dart';
 import 'quran_repository.dart';
 
 class QuranAppController extends ChangeNotifier {
@@ -16,12 +18,17 @@ class QuranAppController extends ChangeNotifier {
     AiSecretsStore? aiSecretsStore,
     AiCacheRepository? aiCacheRepository,
     GeminiClient? geminiClient,
+    ProgressSyncService? progressSyncService,
   })  : _catalogSource = catalogSource,
         _appStateStore = appStateStore,
         _tajweedSource = tajweedSource ?? const EmptyTajweedSource(),
         _aiSecretsStore = aiSecretsStore ?? MemoryAiSecretsStore(),
         _aiCacheRepository = aiCacheRepository ?? MemoryAiCacheRepository(),
-        _geminiClient = geminiClient ?? GeminiClient();
+        _geminiClient = geminiClient ?? GeminiClient(),
+        _progressSyncService = progressSyncService ??
+            const DisabledProgressSyncService(
+              'Sync is unavailable in this build.',
+            );
 
   final CatalogSource _catalogSource;
   final AppStateStore _appStateStore;
@@ -29,6 +36,7 @@ class QuranAppController extends ChangeNotifier {
   final AiSecretsStore _aiSecretsStore;
   final AiCacheRepository _aiCacheRepository;
   final GeminiClient _geminiClient;
+  final ProgressSyncService _progressSyncService;
 
   bool _isReady = false;
   List<SurahData> _catalog = const [];
@@ -36,15 +44,22 @@ class QuranAppController extends ChangeNotifier {
   Map<int, SurahProgress> _progressBySurah = const {};
   SurahOrderMode _orderMode = SurahOrderMode.normal;
   GoalState? _goalState;
+  int _goalUpdatedAtEpochMs = 0;
   ReaderSettings _readerSettings = ReaderSettings.defaults;
   LastSavedRangeBookmark? _lastSavedRangeBookmark;
   Map<int, int> _lastReadAyahBySurah = const {};
+  Map<int, int> _lastReadUpdatedAtBySurah = const {};
   bool _hasGeminiApiKey = false;
+  String _syncKey = '';
+  int? _lastSyncAtEpochMs;
+  bool _isSyncing = false;
   int _catalogTotalUnicodeChars = 0;
   Map<int, int> _readUnicodeCharsBySurah = const {};
   int _totalReadUnicodeChars = 0;
   List<SurahData> _visibleSurahsCache = const [];
   bool _isVisibleSurahsDirty = true;
+
+  static const _uuid = Uuid();
 
   static Future<QuranAppController> create() async {
     final controller = QuranAppController(
@@ -54,6 +69,7 @@ class QuranAppController extends ChangeNotifier {
       aiSecretsStore: FlutterSecureAiSecretsStore(),
       aiCacheRepository: await SqfliteAiCacheRepository.open(),
       geminiClient: GeminiClient(),
+      progressSyncService: await createProgressSyncService(),
     );
     await controller.load();
     return controller;
@@ -70,6 +86,18 @@ class QuranAppController extends ChangeNotifier {
   LastSavedRangeBookmark? get lastSavedRangeBookmark => _lastSavedRangeBookmark;
 
   int? lastReadAyahFor(int surahIndex) => _lastReadAyahBySurah[surahIndex];
+
+  String get syncKey => _syncKey;
+
+  bool get isSyncAvailable => _progressSyncService.isAvailable;
+
+  String? get syncUnavailableReason => _progressSyncService.unavailableReason;
+
+  bool get isSyncing => _isSyncing;
+
+  DateTime? get lastSyncAt => _lastSyncAtEpochMs == null
+      ? null
+      : DateTime.fromMillisecondsSinceEpoch(_lastSyncAtEpochMs!);
 
   TajweedAyahData? tajweedFor(int surahIndex, int ayahNumber) {
     return _tajweedBySurah[surahIndex]?[ayahNumber];
@@ -177,25 +205,35 @@ class QuranAppController extends ChangeNotifier {
       (sum, surah) => sum + surah.totalUnicodeChars,
     );
     _tajweedBySurah = await _tajweedSource.loadTajweed();
-    _progressBySurah = {
-      for (final surah in _catalog) surah.index: SurahProgress.empty,
-    };
+    _progressBySurah = _emptyProgressBySurah();
 
     final persistedState = await _appStateStore.load();
+    var shouldPersist = false;
     if (persistedState != null) {
       _orderMode = persistedState.orderMode;
       _goalState = persistedState.goalState;
+      _goalUpdatedAtEpochMs = persistedState.goalUpdatedAtEpochMs;
       _readerSettings = persistedState.readerSettings;
+      _syncKey = persistedState.syncKey;
+      _lastSyncAtEpochMs = persistedState.lastSyncAtEpochMs;
       _lastSavedRangeBookmark = persistedState.lastSavedRangeBookmark;
       _lastReadAyahBySurah = persistedState.lastReadAyahBySurah;
+      _lastReadUpdatedAtBySurah = persistedState.lastReadUpdatedAtBySurah;
       _progressBySurah = {
         for (final surah in _catalog)
           surah.index: persistedState.progressBySurah[surah.index] ??
               SurahProgress.empty,
       };
     }
+    if (_syncKey.isEmpty) {
+      _syncKey = _uuid.v4();
+      shouldPersist = true;
+    }
     _refreshDerivedProgressState();
     _hasGeminiApiKey = await _aiSecretsStore.loadApiKey() != null;
+    if (shouldPersist) {
+      await _persist();
+    }
 
     _isReady = true;
     notifyListeners();
@@ -293,6 +331,7 @@ class QuranAppController extends ChangeNotifier {
   }
 
   Future<void> toggleSurahComplete(SurahData surah, bool isComplete) async {
+    final updatedAt = _timestampNow();
     _progressBySurah = {
       ..._progressBySurah,
       surah.index: isComplete
@@ -300,8 +339,9 @@ class QuranAppController extends ChangeNotifier {
               ranges: [
                 AyahRange(fromAyah: 1, toAyah: surah.ayahCount),
               ],
+              updatedAtEpochMs: updatedAt,
             )
-          : SurahProgress.empty,
+          : SurahProgress(updatedAtEpochMs: updatedAt),
     };
     _refreshDerivedProgressState();
     await _persistAndNotify();
@@ -323,9 +363,13 @@ class QuranAppController extends ChangeNotifier {
       ],
     );
 
+    final updatedAt = _timestampNow();
     _progressBySurah = {
       ..._progressBySurah,
-      surah.index: SurahProgress(ranges: mergedRanges),
+      surah.index: SurahProgress(
+        ranges: mergedRanges,
+        updatedAtEpochMs: updatedAt,
+      ),
     };
     _lastSavedRangeBookmark = LastSavedRangeBookmark(
       surahIndex: surah.index,
@@ -350,9 +394,13 @@ class QuranAppController extends ChangeNotifier {
         removedRange.contains(currentBookmark.toAyah)) {
       _lastSavedRangeBookmark = null;
     }
+    final updatedAt = _timestampNow();
     _progressBySurah = {
       ..._progressBySurah,
-      surahIndex: SurahProgress(ranges: currentRanges),
+      surahIndex: SurahProgress(
+        ranges: currentRanges,
+        updatedAtEpochMs: updatedAt,
+      ),
     };
     _refreshDerivedProgressState();
     await _persistAndNotify();
@@ -365,6 +413,7 @@ class QuranAppController extends ChangeNotifier {
       return 'Goal date must be today or later.';
     }
 
+    _goalUpdatedAtEpochMs = _timestampNow();
     _goalState = GoalState(
       goalDate: normalizedGoalDate,
       startDate: _goalState?.startDate ?? today,
@@ -375,6 +424,7 @@ class QuranAppController extends ChangeNotifier {
 
   Future<void> clearGoal() async {
     _goalState = null;
+    _goalUpdatedAtEpochMs = _timestampNow();
     await _persistAndNotify();
   }
 
@@ -422,19 +472,61 @@ class QuranAppController extends ChangeNotifier {
       ..._lastReadAyahBySurah,
       surahIndex: ayahNumber,
     };
+    _lastReadUpdatedAtBySurah = {
+      ..._lastReadUpdatedAtBySurah,
+      surahIndex: _timestampNow(),
+    };
     await _persist();
   }
 
   Future<void> resetAllProgress() async {
+    final updatedAt = _timestampNow();
     _orderMode = SurahOrderMode.normal;
     _goalState = null;
+    _goalUpdatedAtEpochMs = updatedAt;
     _lastSavedRangeBookmark = null;
     _lastReadAyahBySurah = const {};
-    _progressBySurah = {
-      for (final surah in _catalog) surah.index: SurahProgress.empty,
+    _lastReadUpdatedAtBySurah = {
+      for (final surah in _catalog) surah.index: updatedAt,
     };
+    _progressBySurah = _emptyProgressBySurah(updatedAtEpochMs: updatedAt);
     _refreshDerivedProgressState();
     await _persistAndNotify();
+  }
+
+  Future<String?> syncProgress(String syncKey) async {
+    final normalizedKey = _normalizeSyncKey(syncKey);
+    if (normalizedKey == null) {
+      return 'Enter a valid sync key.';
+    }
+    if (!_progressSyncService.isAvailable) {
+      return _progressSyncService.unavailableReason ?? 'Sync is unavailable.';
+    }
+
+    if (_syncKey != normalizedKey) {
+      _syncKey = normalizedKey;
+      await _persist();
+    }
+
+    _isSyncing = true;
+    notifyListeners();
+    try {
+      final remoteSnapshot = await _progressSyncService.fetch(normalizedKey);
+      if (remoteSnapshot != null) {
+        _mergeRemoteSnapshot(remoteSnapshot);
+      }
+      await _progressSyncService.save(_createSyncSnapshot(normalizedKey));
+      _lastSyncAtEpochMs = _timestampNow();
+      await _persist();
+      return null;
+    } on ProgressSyncUnavailableException catch (error) {
+      return error.message;
+    } catch (error) {
+      return 'Sync failed: $error';
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+    }
   }
 
   Future<String?> saveGeminiApiKey(String apiKey) async {
@@ -523,9 +615,13 @@ class QuranAppController extends ChangeNotifier {
         orderMode: _orderMode,
         progressBySurah: _progressBySurah,
         goalState: _goalState,
+        goalUpdatedAtEpochMs: _goalUpdatedAtEpochMs,
         readerSettings: _readerSettings,
+        syncKey: _syncKey,
+        lastSyncAtEpochMs: _lastSyncAtEpochMs,
         lastSavedRangeBookmark: _lastSavedRangeBookmark,
         lastReadAyahBySurah: _lastReadAyahBySurah,
+        lastReadUpdatedAtBySurah: _lastReadUpdatedAtBySurah,
       ),
     );
   }
@@ -541,6 +637,148 @@ class QuranAppController extends ChangeNotifier {
     _aiCacheRepository.close();
     super.dispose();
   }
+
+  Map<int, SurahProgress> _emptyProgressBySurah({int updatedAtEpochMs = 0}) {
+    return {
+      for (final surah in _catalog)
+        surah.index: SurahProgress(updatedAtEpochMs: updatedAtEpochMs),
+    };
+  }
+
+  SyncProgressSnapshot _createSyncSnapshot(String syncKey) {
+    return SyncProgressSnapshot(
+      syncKey: syncKey,
+      progressBySurah: {
+        for (final entry in _progressBySurah.entries)
+          entry.key: entry.value.copyWith(
+            ranges: List<AyahRange>.unmodifiable(entry.value.ranges),
+          ),
+      },
+      goalState: _goalState,
+      goalUpdatedAtEpochMs: _goalUpdatedAtEpochMs,
+      lastReadAyahBySurah: Map<int, int>.unmodifiable(_lastReadAyahBySurah),
+      lastReadUpdatedAtBySurah: Map<int, int>.unmodifiable(
+        _lastReadUpdatedAtBySurah,
+      ),
+    );
+  }
+
+  void _mergeRemoteSnapshot(SyncProgressSnapshot remoteSnapshot) {
+    _progressBySurah = {
+      for (final surah in _catalog)
+        surah.index: _mergeSurahProgress(
+          _progressBySurah[surah.index] ?? SurahProgress.empty,
+          remoteSnapshot.progressBySurah[surah.index] ?? SurahProgress.empty,
+        ),
+    };
+
+    final localGoalUpdatedAt = _goalUpdatedAtEpochMs;
+    final remoteGoalUpdatedAt = remoteSnapshot.goalUpdatedAtEpochMs;
+    if (remoteGoalUpdatedAt > localGoalUpdatedAt ||
+        (remoteGoalUpdatedAt == localGoalUpdatedAt &&
+            _goalState == null &&
+            remoteSnapshot.goalState != null)) {
+      _goalState = remoteSnapshot.goalState;
+      _goalUpdatedAtEpochMs = remoteGoalUpdatedAt;
+    }
+
+    final mergedLastReadAyahBySurah = <int, int>{};
+    final mergedLastReadUpdatedAtBySurah = <int, int>{};
+    for (final surah in _catalog) {
+      final surahIndex = surah.index;
+      final localUpdatedAt = _lastReadUpdatedAtBySurah[surahIndex] ?? 0;
+      final remoteUpdatedAt =
+          remoteSnapshot.lastReadUpdatedAtBySurah[surahIndex] ?? 0;
+      final localAyah = _lastReadAyahBySurah[surahIndex];
+      final remoteAyah = remoteSnapshot.lastReadAyahBySurah[surahIndex];
+
+      if (remoteUpdatedAt > localUpdatedAt) {
+        _writeMergedLastRead(
+          mergedLastReadAyahBySurah,
+          mergedLastReadUpdatedAtBySurah,
+          surahIndex: surahIndex,
+          ayahNumber: remoteAyah,
+          updatedAtEpochMs: remoteUpdatedAt,
+        );
+        continue;
+      }
+      if (localUpdatedAt > remoteUpdatedAt) {
+        _writeMergedLastRead(
+          mergedLastReadAyahBySurah,
+          mergedLastReadUpdatedAtBySurah,
+          surahIndex: surahIndex,
+          ayahNumber: localAyah,
+          updatedAtEpochMs: localUpdatedAt,
+        );
+        continue;
+      }
+
+      final mergedAyah = remoteAyah ?? localAyah;
+      _writeMergedLastRead(
+        mergedLastReadAyahBySurah,
+        mergedLastReadUpdatedAtBySurah,
+        surahIndex: surahIndex,
+        ayahNumber: mergedAyah,
+        updatedAtEpochMs: localUpdatedAt,
+      );
+    }
+
+    _lastReadAyahBySurah = mergedLastReadAyahBySurah;
+    _lastReadUpdatedAtBySurah = mergedLastReadUpdatedAtBySurah;
+    _refreshDerivedProgressState();
+  }
+
+  SurahProgress _mergeSurahProgress(
+    SurahProgress localProgress,
+    SurahProgress remoteProgress,
+  ) {
+    if (remoteProgress.updatedAtEpochMs > localProgress.updatedAtEpochMs) {
+      return remoteProgress;
+    }
+    if (localProgress.updatedAtEpochMs > remoteProgress.updatedAtEpochMs) {
+      return localProgress;
+    }
+    if (remoteProgress.ranges.isEmpty) {
+      return localProgress;
+    }
+    if (localProgress.ranges.isEmpty) {
+      return remoteProgress;
+    }
+    return SurahProgress(
+      ranges: mergeAyahRanges([
+        ...localProgress.ranges,
+        ...remoteProgress.ranges,
+      ]),
+      updatedAtEpochMs: localProgress.updatedAtEpochMs,
+    );
+  }
+
+  void _writeMergedLastRead(
+    Map<int, int> mergedLastReadAyahBySurah,
+    Map<int, int> mergedLastReadUpdatedAtBySurah, {
+    required int surahIndex,
+    required int? ayahNumber,
+    required int updatedAtEpochMs,
+  }) {
+    if (updatedAtEpochMs > 0) {
+      mergedLastReadUpdatedAtBySurah[surahIndex] = updatedAtEpochMs;
+    }
+    if (ayahNumber != null) {
+      mergedLastReadAyahBySurah[surahIndex] = ayahNumber;
+    }
+  }
+
+  String? _normalizeSyncKey(String value) {
+    final normalized = value.trim();
+    if (normalized.isEmpty ||
+        normalized.contains('/') ||
+        RegExp(r'\s').hasMatch(normalized)) {
+      return null;
+    }
+    return normalized;
+  }
+
+  int _timestampNow() => DateTime.now().millisecondsSinceEpoch;
 }
 
 class MissingGeminiApiKeyException implements Exception {

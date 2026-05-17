@@ -84,13 +84,17 @@ void main() {
       orderMode: SurahOrderMode.normal,
       progressBySurah: {},
       goalState: null,
+      goalUpdatedAtEpochMs: 0,
       readerSettings: ReaderSettings.defaults,
+      syncKey: 'shared-key',
+      lastSyncAtEpochMs: 42,
       lastSavedRangeBookmark: LastSavedRangeBookmark(
         surahIndex: 2,
         fromAyah: 5,
         toAyah: 7,
       ),
       lastReadAyahBySurah: {2: 6},
+      lastReadUpdatedAtBySurah: {2: 99},
     );
 
     final restored = PersistedState.fromJson(state.toJson());
@@ -100,5 +104,8 @@ void main() {
     expect(restored.lastSavedRangeBookmark!.fromAyah, 5);
     expect(restored.lastSavedRangeBookmark!.toAyah, 7);
     expect(restored.lastReadAyahBySurah, {2: 6});
+    expect(restored.lastReadUpdatedAtBySurah, {2: 99});
+    expect(restored.syncKey, 'shared-key');
+    expect(restored.lastSyncAtEpochMs, 42);
   });
 }

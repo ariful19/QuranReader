@@ -13,6 +13,11 @@ import 'package:quran_reader/src/reader_page.dart';
 
 void main() {
   testWidgets('settings page saves and removes Gemini API key', (tester) async {
+    tester.view.physicalSize = const Size(430, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final secretsStore = MemoryAiSecretsStore();
     final controller = QuranAppController(
       catalogSource: _SimpleCatalogSource(),
@@ -38,13 +43,24 @@ void main() {
       find.byKey(const Key('gemini-api-key-field')),
       'test-api-key',
     );
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('save-gemini-api-key-button')),
+      150,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.byKey(const Key('save-gemini-api-key-button')));
     await tester.pumpAndSettle();
 
     expect(controller.hasGeminiApiKey, isTrue);
     expect(await secretsStore.loadApiKey(), 'test-api-key');
-    expect(find.byKey(const Key('delete-gemini-api-key-button')), findsOneWidget);
+    expect(
+        find.byKey(const Key('delete-gemini-api-key-button')), findsOneWidget);
 
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('delete-gemini-api-key-button')),
+      150,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.byKey(const Key('delete-gemini-api-key-button')));
     await tester.pumpAndSettle();
 
@@ -125,10 +141,12 @@ void main() {
 }
 
 Future<void> _longPressWord(WidgetTester tester, String word) async {
-  final richTextFinder = find.descendant(
-    of: find.byKey(const Key('continuous-ayah-text')),
-    matching: find.byType(RichText),
-  ).first;
+  final richTextFinder = find
+      .descendant(
+        of: find.byKey(const Key('continuous-ayah-text')),
+        matching: find.byType(RichText),
+      )
+      .first;
   final richText = tester.widget<RichText>(richTextFinder);
   final renderParagraph = tester.renderObject<RenderParagraph>(richTextFinder);
   final plainText = richText.text.toPlainText(includePlaceholders: true);
@@ -141,7 +159,8 @@ Future<void> _longPressWord(WidgetTester tester, String word) async {
     ),
   );
   expect(boxes, isNotEmpty);
-  final globalCenter = renderParagraph.localToGlobal(boxes.first.toRect().center);
+  final globalCenter =
+      renderParagraph.localToGlobal(boxes.first.toRect().center);
   await tester.longPressAt(globalCenter);
   await tester.pumpAndSettle();
 }

@@ -179,6 +179,12 @@ void main() {
     );
     expect(fullscreenProgressAfter.value ?? 0, greaterThan(0));
 
+    await tester.drag(
+      find.byKey(const Key('reader-scroll-view')),
+      const Offset(0, 120),
+    );
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(const Key('reader-progress-button')));
     await tester.pumpAndSettle();
 
@@ -190,6 +196,66 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('reader-progress-card')), findsNothing);
+  });
+
+  testWidgets(
+      'reader toolbar hides on upward scroll and reappears on downward scroll',
+      (tester) async {
+    final controller = QuranAppController(
+      catalogSource: _FakeCatalogSource(),
+      appStateStore: _MemoryStateStore(),
+    );
+    await controller.load();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData(useMaterial3: true),
+        home: SurahReaderPage(
+          controller: controller,
+          surahIndex: 1,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<AnimatedOpacity>(
+            find.byKey(const Key('reader-fullscreen-toolbar')),
+          )
+          .opacity,
+      1,
+    );
+
+    await tester.drag(
+      find.byKey(const Key('reader-scroll-view')),
+      const Offset(0, -250),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<AnimatedOpacity>(
+            find.byKey(const Key('reader-fullscreen-toolbar')),
+          )
+          .opacity,
+      0,
+    );
+
+    await tester.drag(
+      find.byKey(const Key('reader-scroll-view')),
+      const Offset(0, 250),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<AnimatedOpacity>(
+            find.byKey(const Key('reader-fullscreen-toolbar')),
+          )
+          .opacity,
+      1,
+    );
   });
 
   testWidgets('reader keeps ayah markers out of the RichText span tree',
@@ -849,6 +915,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(firstController.lastReadAyahFor(1), greaterThan(1));
+
+    await tester.drag(
+      find.byKey(const Key('reader-scroll-view')),
+      const Offset(0, 120),
+    );
+    await tester.pumpAndSettle();
 
     await tester.pageBack();
     await tester.pumpAndSettle();

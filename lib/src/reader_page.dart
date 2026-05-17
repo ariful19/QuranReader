@@ -38,6 +38,7 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
   double? _horizontalDragStartX;
   double? _horizontalDragCurrentX;
   bool _hasAppliedInitialAyahJump = false;
+  bool _isToolbarVisible = true;
   int _initialAyahJumpAttempts = 0;
 
   QuranAppController get controller => widget.controller;
@@ -135,6 +136,22 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
       }
       unawaited(_rememberCurrentAyahIfNeeded());
     });
+  }
+
+  bool _handleReaderUserScroll(UserScrollNotification notification) {
+    if (notification.direction == ScrollDirection.idle) {
+      return false;
+    }
+
+    final shouldShowToolbar = notification.direction == ScrollDirection.forward;
+    if (shouldShowToolbar == _isToolbarVisible) {
+      return false;
+    }
+
+    setState(() {
+      _isToolbarVisible = shouldShowToolbar;
+    });
+    return false;
   }
 
   int? _topVisibleAyahNumber() {
@@ -498,36 +515,56 @@ class _SurahReaderPageState extends State<SurahReaderPage> {
                   onHorizontalDragEnd: _handleHorizontalDragEnd,
                   child: Stack(
                     children: [
-                      SafeArea(
-                        left: false,
-                        right: false,
-                        bottom: false,
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(8, 8, 8, 20),
-                          child: _ReaderCanvas(
-                            surah: surah,
-                            controller: controller,
-                            palette: palette,
-                            fontSize: settings.fontSize,
-                            scrollController: _readerScrollController,
-                            ayahAnchorKeyFor: _anchorKeyForAyah,
-                            continuousAyahTextKey: _continuousAyahTextKey,
+                      NotificationListener<UserScrollNotification>(
+                        onNotification: _handleReaderUserScroll,
+                        child: SafeArea(
+                          left: false,
+                          right: false,
+                          bottom: false,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 8, 8, 20),
+                            child: _ReaderCanvas(
+                              surah: surah,
+                              controller: controller,
+                              palette: palette,
+                              fontSize: settings.fontSize,
+                              scrollController: _readerScrollController,
+                              ayahAnchorKeyFor: _anchorKeyForAyah,
+                              continuousAyahTextKey: _continuousAyahTextKey,
+                            ),
                           ),
                         ),
                       ),
                       SafeArea(
                         child: Padding(
                           padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                          child: _FullscreenToolbar(
-                            surah: surah,
-                            palette: palette,
-                            onBack: () => Navigator.of(context).maybePop(),
-                            onShowProgress: () => _showProgressDialog(
-                              percent: percent,
-                              savedRanges: savedRanges,
-                              palette: palette,
+                          child: IgnorePointer(
+                            ignoring: !_isToolbarVisible,
+                            child: AnimatedSlide(
+                              duration: const Duration(milliseconds: 180),
+                              curve: Curves.easeOutCubic,
+                              offset: _isToolbarVisible
+                                  ? Offset.zero
+                                  : const Offset(0, -1.15),
+                              child: AnimatedOpacity(
+                                key: const Key('reader-fullscreen-toolbar'),
+                                duration: const Duration(milliseconds: 180),
+                                curve: Curves.easeOutCubic,
+                                opacity: _isToolbarVisible ? 1 : 0,
+                                child: _FullscreenToolbar(
+                                  surah: surah,
+                                  palette: palette,
+                                  onBack: () =>
+                                      Navigator.of(context).maybePop(),
+                                  onShowProgress: () => _showProgressDialog(
+                                    percent: percent,
+                                    savedRanges: savedRanges,
+                                    palette: palette,
+                                  ),
+                                  onSettings: _showReaderSettingsDialog,
+                                ),
+                              ),
                             ),
-                            onSettings: _showReaderSettingsDialog,
                           ),
                         ),
                       ),

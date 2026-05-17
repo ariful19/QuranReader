@@ -252,17 +252,32 @@ AyahRange suggestedRangeForTappedAyah({
 
 @immutable
 class SurahProgress {
-  const SurahProgress({this.ranges = const []});
+  const SurahProgress({
+    this.ranges = const [],
+    this.updatedAtEpochMs = 0,
+  });
 
   static const empty = SurahProgress();
 
   final List<AyahRange> ranges;
+  final int updatedAtEpochMs;
 
   bool get isEmpty => ranges.isEmpty;
+
+  SurahProgress copyWith({
+    List<AyahRange>? ranges,
+    int? updatedAtEpochMs,
+  }) {
+    return SurahProgress(
+      ranges: ranges ?? this.ranges,
+      updatedAtEpochMs: updatedAtEpochMs ?? this.updatedAtEpochMs,
+    );
+  }
 
   Map<String, Object?> toJson() {
     return {
       'ranges': ranges.map((range) => range.toJson()).toList(),
+      'updatedAtEpochMs': updatedAtEpochMs,
     };
   }
 
@@ -279,6 +294,7 @@ class SurahProgress {
             ),
           )
           .toList(),
+      updatedAtEpochMs: (json['updatedAtEpochMs'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -403,17 +419,25 @@ class PersistedState {
     required this.orderMode,
     required this.progressBySurah,
     required this.goalState,
+    required this.goalUpdatedAtEpochMs,
     required this.readerSettings,
+    required this.syncKey,
+    required this.lastSyncAtEpochMs,
     required this.lastSavedRangeBookmark,
     required this.lastReadAyahBySurah,
+    required this.lastReadUpdatedAtBySurah,
   });
 
   final SurahOrderMode orderMode;
   final Map<int, SurahProgress> progressBySurah;
   final GoalState? goalState;
+  final int goalUpdatedAtEpochMs;
   final ReaderSettings readerSettings;
+  final String syncKey;
+  final int? lastSyncAtEpochMs;
   final LastSavedRangeBookmark? lastSavedRangeBookmark;
   final Map<int, int> lastReadAyahBySurah;
+  final Map<int, int> lastReadUpdatedAtBySurah;
 
   Map<String, Object?> toJson() {
     return {
@@ -422,9 +446,15 @@ class PersistedState {
         (key, value) => MapEntry('$key', value.toJson()),
       ),
       'goalState': goalState?.toJson(),
+      'goalUpdatedAtEpochMs': goalUpdatedAtEpochMs,
       'readerSettings': readerSettings.toJson(),
+      'syncKey': syncKey,
+      'lastSyncAtEpochMs': lastSyncAtEpochMs,
       'lastSavedRangeBookmark': lastSavedRangeBookmark?.toJson(),
       'lastReadAyahBySurah': lastReadAyahBySurah.map(
+        (key, value) => MapEntry('$key', value),
+      ),
+      'lastReadUpdatedAtBySurah': lastReadUpdatedAtBySurah.map(
         (key, value) => MapEntry('$key', value),
       ),
     };
@@ -435,6 +465,9 @@ class PersistedState {
         const <String, Object?>{};
     final rawLastReadAyahBySurah =
         (json['lastReadAyahBySurah'] as Map<String, Object?>?) ??
+            const <String, Object?>{};
+    final rawLastReadUpdatedAtBySurah =
+        (json['lastReadUpdatedAtBySurah'] as Map<String, Object?>?) ??
             const <String, Object?>{};
     return PersistedState(
       orderMode: SurahOrderModeStorage.fromStorage(
@@ -454,12 +487,16 @@ class PersistedState {
           ),
         _ => null,
       },
+      goalUpdatedAtEpochMs:
+          (json['goalUpdatedAtEpochMs'] as num?)?.toInt() ?? 0,
       readerSettings: switch (json['readerSettings']) {
         final Map<Object?, Object?> value => ReaderSettings.fromJson(
             value.map((key, mapValue) => MapEntry(key as String, mapValue)),
           ),
         _ => ReaderSettings.defaults,
       },
+      syncKey: json['syncKey'] as String? ?? '',
+      lastSyncAtEpochMs: (json['lastSyncAtEpochMs'] as num?)?.toInt(),
       lastSavedRangeBookmark: switch (json['lastSavedRangeBookmark']) {
         final Map<Object?, Object?> value => LastSavedRangeBookmark.fromJson(
             value.map((key, mapValue) => MapEntry(key as String, mapValue)),
@@ -468,6 +505,9 @@ class PersistedState {
       },
       lastReadAyahBySurah: rawLastReadAyahBySurah.map(
         (key, value) => MapEntry(int.parse(key), value as int),
+      ),
+      lastReadUpdatedAtBySurah: rawLastReadUpdatedAtBySurah.map(
+        (key, value) => MapEntry(int.parse(key), (value as num).toInt()),
       ),
     );
   }
